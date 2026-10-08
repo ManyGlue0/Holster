@@ -2,7 +2,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, FolderOpen, GripVertical, PackageOpen, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, GripVertical, PackageOpen, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type AppInfo, type AppView } from "../lib/api";
 import { AppIcon } from "../lib/icons";
@@ -11,6 +11,12 @@ import { tileVars } from "../lib/palette";
 import { useStore } from "../lib/store";
 import { Dot, Row, Section, type DotState } from "./settingsUi";
 import { Button, IconButton, PinButton, Segmented, Stepper, Toggle } from "./ui";
+
+/** Fades the panel out, then folds it back into the dock. */
+function backToDock() {
+  useStore.setState({ panelLeaving: true });
+  window.setTimeout(() => api.openDock(), 90);
+}
 
 export function SettingsPage() {
   const settings = useStore((s) => s.settings);
@@ -28,6 +34,9 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <header className="panel-bar">
+        <IconButton label="Back to the dock" onClick={backToDock}>
+          <ChevronLeft size={19} />
+        </IconButton>
         <h1 className="bar-title">Settings</h1>
         <PinButton />
       </header>
@@ -237,8 +246,11 @@ function AppRow({ app }: { app: AppView }) {
         <span className="app-grip" {...attributes} {...listeners} aria-label={`Reorder ${app.name}`}>
           <GripVertical size={14} />
         </span>
-        <span className={`app-tile ${app.error ? "broken" : ""}`} style={app.error ? undefined : tileVars(app.color)}>
-          <AppIcon app={app} size={app.image ? 20 : 15} />
+        <span
+          className={`app-tile ${app.error ? "broken" : ""} ${app.image ? "has-image" : ""}`}
+          style={app.error ? undefined : tileVars(app.color)}
+        >
+          <AppIcon app={app} size={app.image ? 32 : 15} />
         </span>
         <span className="app-text">
           <span className="app-name">{app.name}</span>

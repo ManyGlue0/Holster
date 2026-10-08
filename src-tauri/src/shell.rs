@@ -23,7 +23,7 @@ use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-use crate::apps::{Registry, Status, FALLBACK_SIZE};
+use crate::apps::{Registry, Status, FALLBACK_SIZE as ERROR_SIZE};
 use crate::health::Health;
 use crate::settings::Prefs;
 
@@ -396,7 +396,7 @@ pub struct PreviewState {
     pub width: f64,
     pub height: f64,
     pub fallback: bool,
-    /// Why opening the app failed, shown on the fallback card.
+    /// Why opening the app failed, shown on the error card (`fallback`).
     pub error: Option<String>,
     /// Content visible (false while the card is still unfolding or folding away).
     pub shown: bool,
@@ -440,6 +440,10 @@ struct State {
     rows: usize,
     preview: Option<Shown>,
     preview_shown: bool,
+    /// The preview card is on screen (otherwise parked).
+    preview_out: bool,
+    /// The settings card is on screen (otherwise parked).
+    gear_out: bool,
     preview_failed: std::collections::HashSet<String>,
     /// Bumped on every preview change so delayed hides can tell they're stale.
     preview_gen: u64,
@@ -501,6 +505,15 @@ fn hide(hwnd: isize) {
     unsafe { ShowWindow(hwnd as HWND, SW_HIDE) };
 }
 
+/// Moves a card window far off screen instead of hiding it. A hidden window
+/// shows a hollow frame for its first frames when it's shown again; a parked
+/// one stays composed, so it slides in clean.
+fn park(win: &Win) {
+    let r = win.anim.target();
+    let (w, h) = (r.w().max(1.0), r.h().max(1.0));
+    win.anim.jump(Rect { l: -32000.0, t: -32000.0, r: -32000.0 + w, b: -32000.0 + h });
+}
+
 fn visible(hwnd: isize) -> bool {
     unsafe { IsWindowVisible(hwnd as HWND) != 0 }
 }
@@ -534,6 +547,8 @@ impl Shell {
                 rows: 1,
                 preview: None,
                 preview_shown: false,
+                preview_out: false,
+                gear_out: false,
                 preview_failed: Default::default(),
                 preview_gen: 0,
             }),
@@ -542,8 +557,13 @@ impl Shell {
         let g = shell.geometry();
         shell.state.lock().unwrap().rows = g.rows;
         shell.main.anim.jump(g.tab);
+        // The cards live parked off screen: always shown, always composed.
         shell.gear.anim.jump(g.gear_hidden);
+        park(&shell.gear);
+        park(&shell.preview);
         show(main);
+        show(gear);
+        show(preview);
         shell
     }
 
@@ -621,12 +641,14 @@ impl Shell {
         Rect { l: r - w, t, r, b: t + h }
     }
 
-    /// Where the preview unfolds from: a sliver tucked against the dock.
+    /// Where the preview unfolds from (and folds back to): a smaller card
+    /// tucked against the dock, so it reads as a drawer, never a thin pill.
     fn preview_start(g: &Geometry, final_rect: Rect) -> Rect {
         let s = g.scale;
         let cy = (final_rect.t + final_rect.b) / 2.0;
-        let h = (final_rect.h() * 0.55).max(40.0 * s);
-        Rect { l: final_rect.r - (12.0 * s).round(), t: (cy - h / 2.0).round(), r: final_rect.r, b: (cy + h / 2.0).round() }
+        let w = (final_rect.w() * 0.3).max(56.0 * s).min(final_rect.w());
+        let h = (final_rect.h() * 0.72).max(40.0 * s).min(final_rect.h());
+        Rect { l: (final_rect.r - w).round(), t: (cy - h / 2.0).round(), r: final_rect.r, b: (cy + h / 2.0).round() }
     }
 
     fn emit_state(&self) {
@@ -673,15 +695,22 @@ impl Shell {
     // ---- dock ----------------------------------------------------------------------
 
     /// Grows the tab into the dock. Never takes focus.
+    /// Also folds the settings panel back into the dock (its back button).
     pub fn open_dock(self: &Arc<Self>) {
-        {
+        let (from_panel, prev) = {
             let mut st = self.state.lock().unwrap();
-            if !matches!(st.mode, Mode::Closed | Mode::Closing) || st.drag.is_some() {
+            let from_panel = matches!(st.mode, Mode::Panel | Mode::Expanding);
+            if !(from_panel || matches!(st.mode, Mode::Closed | Mode::Closing)) || st.drag.is_some() {
                 return;
             }
             st.mode = Mode::Opening;
             st.hover = false;
             st.opened_at = Instant::now();
+            (from_panel, st.prev_foreground)
+        };
+        if from_panel {
+            // The dock never holds focus: give it back to where it came from.
+            unsafe { SendMessageW(self.main.hwnd as HWND, WM_RESTORE_FOCUS, prev as WPARAM, 0) };
         }
         let g = self.geometry();
         self.state.lock().unwrap().rows = g.rows;
@@ -703,9 +732,9 @@ impl Shell {
             })),
             None,
         );
-        if !visible(self.gear.hwnd) {
+        let was_out = std::mem::replace(&mut self.state.lock().unwrap().gear_out, true);
+        if !was_out {
             self.gear.anim.jump(g.gear_hidden);
-            show(self.gear.hwnd);
         }
         self.gear.anim.animate(g.gear, GEAR_SPRING, None, None);
     }
@@ -763,19 +792,22 @@ impl Shell {
     }
 
     fn retract_gear(self: &Arc<Self>, g: &Geometry) {
-        if !visible(self.gear.hwnd) {
+        if !self.state.lock().unwrap().gear_out {
             return;
         }
         let me = self.clone();
         self.gear.anim.animate(
             g.gear_hidden,
             GEAR_HIDE_SPRING,
-            None,
             Some(Box::new(move || {
-                if !matches!(me.mode(), Mode::Opening | Mode::Dock) {
-                    hide(me.gear.hwnd);
+                let mut st = me.state.lock().unwrap();
+                if !matches!(st.mode, Mode::Opening | Mode::Dock) {
+                    st.gear_out = false;
+                    drop(st);
+                    park(&me.gear);
                 }
             })),
+            None,
         );
     }
 
@@ -970,25 +1002,35 @@ impl Shell {
         let _ = self.app.emit("preview", payload);
     }
 
-    fn preview_size(&self, id: &str, st: &State) -> (f64, f64, bool) {
+    /// Whether `id` has something to preview right now: a page on disk
+    /// always, a live page only while the app may be running.
+    fn has_preview_now(&self, id: &str, st: &State) -> bool {
+        if st.preview_failed.contains(id) {
+            return false;
+        }
+        let Some(p) = self.reg.manifest(id).and_then(|m| m.preview) else { return false };
+        p.path.is_some() || (p.url.is_some() && self.reg.status(id) != Status::Stopped)
+    }
+
+    /// The card size for `id` and whether it's the error card; None when
+    /// there's nothing to show.
+    fn preview_size(&self, id: &str, st: &State) -> Option<(f64, f64, bool)> {
         if st.preview.as_ref().is_some_and(|p| p.id == id && p.error.is_some()) {
-            return (FALLBACK_SIZE.0, FALLBACK_SIZE.1 + 22.0, true);
+            return Some((ERROR_SIZE.0, ERROR_SIZE.1, true));
         }
-        let size = self.reg.preview_size(id);
-        let stopped = self.reg.status(id) == Status::Stopped;
-        match size {
-            Some((w, h)) if !stopped && !st.preview_failed.contains(id) => (w, h, false),
-            _ => (FALLBACK_SIZE.0, FALLBACK_SIZE.1, true),
+        if !self.has_preview_now(id, st) {
+            return None;
         }
+        self.reg.preview_size(id).map(|(w, h)| (w, h, false))
     }
 
     /// Shows `id`'s preview next to its tile; `anchor_y` is the tile center in
-    /// the main window's CSS px.
+    /// the main window's CSS px. Apps without a preview show nothing.
     pub fn show_preview(self: &Arc<Self>, id: &str, anchor_y: f64) {
         self.show_preview_with(id, anchor_y, None)
     }
 
-    /// Shows the fallback card with why opening `id` failed.
+    /// Shows a small card saying why opening `id` failed.
     pub fn show_error(self: &Arc<Self>, id: &str, anchor_y: f64, error: String) {
         if self.mode() == Mode::Closed {
             return;
@@ -1007,11 +1049,16 @@ impl Shell {
             if st.preview.as_ref().is_some_and(|p| p.id != id || error.is_some()) {
                 st.preview.as_mut().unwrap().error = None;
             }
-            let (w, h, fallback) = match &error {
-                Some(_) => (FALLBACK_SIZE.0, FALLBACK_SIZE.1 + 22.0, true),
+            let size = match &error {
+                Some(_) => Some((ERROR_SIZE.0, ERROR_SIZE.1, true)),
                 None => self.preview_size(id, &st),
             };
-            let first = st.preview.is_none() || !visible(self.preview.hwnd);
+            let Some((w, h, fallback)) = size else {
+                drop(st);
+                self.hide_preview();
+                return;
+            };
+            let first = st.preview.is_none() || !st.preview_out;
             if !first
                 && error.is_none()
                 && st.preview.as_ref().is_some_and(|p| {
@@ -1022,28 +1069,14 @@ impl Shell {
             }
             st.preview = Some(Shown { id: id.to_string(), anchor, w, h, fallback, error });
             st.preview_gen += 1;
-            if first {
-                st.preview_shown = false;
-            }
+            // Content is revealed while the card unfolds around it.
+            st.preview_shown = true;
+            st.preview_out = true;
             (Self::preview_rect(&g, anchor, w, h), first)
         };
         if first {
             self.preview.anim.jump(Self::preview_start(&g, rect));
-            show(self.preview.hwnd);
-            let me = self.clone();
-            self.preview.anim.animate(
-                rect,
-                PREVIEW_SPRING,
-                Some(Box::new(move || {
-                    let mut st = me.state.lock().unwrap();
-                    if st.preview.is_some() {
-                        st.preview_shown = st.preview.is_some();
-                        drop(st);
-                        me.emit_preview();
-                    }
-                })),
-                None,
-            );
+            self.preview.anim.animate(rect, PREVIEW_SPRING, None, None);
         } else {
             self.preview.anim.animate(rect, GLIDE_SPRING, None, None);
         }
@@ -1063,47 +1096,57 @@ impl Shell {
             st.preview_gen
         };
         self.emit_preview();
+        // Fold right away: the content rides the leading edge back behind the
+        // dock and fades on the way, like a drawer closing.
+        let g = self.geometry();
+        let cur = self.preview.anim.target();
         let me = self.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(70));
-            if me.state.lock().unwrap().preview_gen != gen {
-                return;
-            }
-            let g = me.geometry();
-            let cur = me.preview.anim.target();
-            let me2 = me.clone();
-            me.preview.anim.animate(
-                Self::preview_start(&g, cur),
-                PREVIEW_HIDE_SPRING,
-                None,
-                Some(Box::new(move || {
-                    if me2.state.lock().unwrap().preview_gen == gen {
-                        hide(me2.preview.hwnd);
-                    }
-                })),
-            );
-        });
+        // Park as soon as the fold is nearly done: waiting for the spring's
+        // last pixel leaves a small stub of card behind for a few frames.
+        self.preview.anim.animate(
+            Self::preview_end(&g, cur),
+            PREVIEW_HIDE_SPRING,
+            Some(Box::new(move || {
+                let mut st = me.state.lock().unwrap();
+                if st.preview_gen == gen {
+                    st.preview_out = false;
+                    drop(st);
+                    park(&me.preview);
+                }
+            })),
+            None,
+        );
     }
 
-    /// Instant hide (dock closing, dragging, panel opening).
+    /// Where a closing preview folds to: a thin strip behind the dock, so
+    /// whatever is left when it's parked is a sliver, not a card.
+    fn preview_end(g: &Geometry, cur: Rect) -> Rect {
+        let s = g.scale;
+        let cy = (cur.t + cur.b) / 2.0;
+        let h = (cur.h() * 0.6).max(32.0 * s);
+        Rect { l: cur.r - (10.0 * s).round(), t: (cy - h / 2.0).round(), r: cur.r, b: (cy + h / 2.0).round() }
+    }
+
+    /// Instant hide (dragging, display changes).
     fn hide_preview_now(&self) {
         {
             let mut st = self.state.lock().unwrap();
             st.preview = None;
             st.preview_shown = false;
+            st.preview_out = false;
             st.preview_gen += 1;
         }
-        hide(self.preview.hwnd);
+        park(&self.preview);
         self.emit_preview();
     }
 
     /// The preview page asked for a new size (postMessage resize).
     pub fn resize_preview(self: &Arc<Self>, id: &str, w: f64, h: f64) {
-        let (w, h) = self.reg.set_preview_size(id, w, h);
-        self.refit_preview(id, Some((w, h)));
+        self.reg.set_preview_size(id, w, h);
+        self.refit_preview(id);
     }
 
-    /// The preview failed to load: show the fallback card instead.
+    /// The preview page didn't load: show nothing for it.
     pub fn preview_failed(self: &Arc<Self>, id: &str, failed: bool) {
         {
             let mut st = self.state.lock().unwrap();
@@ -1112,16 +1155,24 @@ impl Shell {
                 return;
             }
         }
-        self.refit_preview(id, None);
+        self.refit_preview(id);
     }
 
-    /// Re-sizes the visible preview if it belongs to `id`.
-    fn refit_preview(self: &Arc<Self>, id: &str, _size: Option<(f64, f64)>) {
+    /// Re-sizes the visible preview if it belongs to `id`, or folds it away
+    /// when there's nothing left to show.
+    fn refit_preview(self: &Arc<Self>, id: &str) {
         let g = self.geometry();
         let rect = {
             let mut st = self.state.lock().unwrap();
-            let (w, h, fallback) = self.preview_size(id, &st);
-            let Some(p) = st.preview.as_mut().filter(|p| p.id == id) else { return };
+            if st.preview.as_ref().is_none_or(|p| p.id != id) {
+                return;
+            }
+            let Some((w, h, fallback)) = self.preview_size(id, &st) else {
+                drop(st);
+                self.hide_preview();
+                return;
+            };
+            let p = st.preview.as_mut().unwrap();
             if p.w == w && p.h == h && p.fallback == fallback {
                 return;
             }
@@ -1134,14 +1185,14 @@ impl Shell {
         self.emit_preview();
     }
 
-    /// Statuses changed: a shown preview may need to switch to or from fallback.
+    /// Statuses changed: a live preview appears or goes away with its app.
     pub fn statuses_changed(self: &Arc<Self>) {
         let id = self.state.lock().unwrap().preview.as_ref().map(|p| p.id.clone());
         if let Some(id) = id {
             if self.reg.status(&id) == Status::Running {
                 self.state.lock().unwrap().preview_failed.remove(&id);
             }
-            self.refit_preview(&id, None);
+            self.refit_preview(&id);
         }
     }
 
@@ -1351,7 +1402,12 @@ unsafe extern "system" fn subclass_proc(
 /// Frosted acrylic via the window accent policy. Unlike the DWM system
 /// backdrop (which falls back to a flat color whenever the window is not
 /// active), this stays frosted while the cards sit unfocused on the edge.
-pub fn apply_material(hwnd: isize, dark: bool) -> bool {
+///
+/// `card`: the settings and preview cards carry the veil in the material
+/// itself (tint = acrylic tint with the CSS veil composited over it). While a
+/// card grows, the webview fills the new edge a frame late; with the veil in
+/// the material that edge already looks finished, so nothing flickers.
+pub fn apply_material(hwnd: isize, dark: bool, card: bool) -> bool {
     use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     #[repr(C)]
     struct AccentPolicy {
@@ -1378,7 +1434,13 @@ pub fn apply_material(hwnd: isize, dark: bool) -> bool {
         };
         let set: SetWca = std::mem::transmute(proc);
         // Gradient is ABGR: a soft tint that keeps the blur legible.
-        let gradient = if dark { 0x5C201C1Cu32 } else { 0x66F4F2F2u32 };
+        let gradient = match (dark, card) {
+            (true, false) => 0x5C201C1Cu32,
+            (false, false) => 0x66F4F2F2u32,
+            // rgba(24,24,28,.52) and rgba(249,249,251,.6) over the tints above.
+            (true, true) => 0xB01D1919u32,
+            (false, true) => 0xC2F9F7F7u32,
+        };
         let mut policy = AccentPolicy { state: 4 /* ACRYLICBLURBEHIND */, flags: 2, gradient, animation: 0 };
         let mut data = WinCompAttrData {
             attrib: 19, // WCA_ACCENT_POLICY

@@ -1,6 +1,8 @@
 //! hello-holster: the smallest Holster app, and the dock's test fixture.
 //!
-//! - Serves `/holster/health` and `/holster/preview` (a live clock) on loopback.
+//! - Ships its preview (a live clock) as a page on disk, so Holster shows it
+//!   whether or not the app is running.
+//! - Serves `/holster/health` on loopback, so Holster knows when it runs.
 //! - Writes its manifest to `%APPDATA%\Holster\apps\hello-holster.json` on start.
 //! - Opens in `window` mode: a small native window. Press Space in it to send
 //!   Holster an activity signal (the tab glows mint).
@@ -76,7 +78,6 @@ fn serve(listener: TcpListener) {
             let path = target.split('?').next().unwrap_or("");
             match (method, path) {
                 ("GET", "/holster/health") => respond(stream, "200 OK", "text/plain", b"ok"),
-                ("GET", "/holster/preview") => respond(stream, "200 OK", "text/html; charset=utf-8", PREVIEW.as_bytes()),
                 _ => respond(stream, "404 Not Found", "text/plain", b"Not found"),
             }
         });
@@ -109,14 +110,36 @@ fn json_str(s: &str) -> String {
     out
 }
 
+/// Writes `text` to `file` atomically, only when it changed.
+fn write_if_changed(file: &std::path::Path, text: &str) {
+    if std::fs::read_to_string(file).ok().as_deref() == Some(text) {
+        return;
+    }
+    let tmp = file.with_extension("tmp");
+    if std::fs::write(&tmp, text).is_ok() {
+        let _ = std::fs::rename(&tmp, file);
+    }
+}
+
+/// The preview lives on disk next to the exe, so Holster can show it while
+/// the app is closed. (An installer would ship this file; the example writes it.)
+fn write_preview() -> Option<PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.join("hello-holster-preview");
+    std::fs::create_dir_all(&dir).ok()?;
+    let file = dir.join("index.html");
+    write_if_changed(&file, PREVIEW);
+    Some(file)
+}
+
 /// Registers with Holster, if Holster is installed. Written on every start
 /// because the port (and the exe path) can change.
-fn write_manifest(port: u16) {
+fn write_manifest(port: u16, preview: Option<PathBuf>) {
     let Some(dir) = holster_dir().filter(|d| d.is_dir()) else { return };
     let apps = dir.join("apps");
     let _ = std::fs::create_dir_all(&apps);
     let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
     let base = format!("http://127.0.0.1:{port}/holster");
+    let preview = preview.map(|p| p.display().to_string()).unwrap_or_default();
     let manifest = format!(
         r##"{{
   "schema": 1,
@@ -125,21 +148,16 @@ fn write_manifest(port: u16) {
   "icon": {{ "lucide": "clock" }},
   "color": "#7AD6AF",
   "health": "{base}/health",
-  "preview": {{ "url": "{base}/preview", "width": 260, "height": 132 }},
+  "preview": {{ "path": {preview}, "width": 260, "height": 132 }},
   "open": {{ "mode": "window" }},
   "launch": {{ "exe": {exe}, "args": [] }}
 }}
 "##,
-        exe = json_str(&exe)
+        exe = json_str(&exe),
+        preview = json_str(&preview)
     );
-    // Write to a temp file, then rename: Holster never reads half a manifest.
-    let file = apps.join(format!("{ID}.json"));
-    let tmp = apps.join(format!(".{ID}.json.tmp"));
-    if std::fs::read_to_string(&file).ok().as_deref() != Some(manifest.as_str())
-        && std::fs::write(&tmp, &manifest).is_ok()
-    {
-        let _ = std::fs::rename(&tmp, &file);
-    }
+    // Temp file, then rename: Holster never reads half a manifest.
+    write_if_changed(&apps.join(format!("{ID}.json")), &manifest);
 }
 
 /// POSTs an activity signal to Holster (discovered via holster.json).
@@ -344,7 +362,7 @@ fn main() {
     }
 
     let port = start_server();
-    write_manifest(port);
+    write_manifest(port, write_preview());
 
     unsafe {
         let instance = GetModuleHandleW(std::ptr::null());

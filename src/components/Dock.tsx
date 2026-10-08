@@ -148,7 +148,7 @@ function Tile({
       onClick={(e) => onOpen(app, e.currentTarget)}
     >
       <span className="tile-face">
-        <AppIcon app={app} size={app.image ? 30 : 22} />
+        <AppIcon app={app} size={app.image ? TILE : 22} />
       </span>
       <AnimatePresence>
         {launching && (

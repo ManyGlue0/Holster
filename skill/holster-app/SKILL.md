@@ -12,8 +12,8 @@ This file is everything you need: the contract, the required stack, the design l
 ## Checklist
 
 1. On start, check that `%APPDATA%\Holster\` exists (Holster is installed). If it does, write your manifest to `%APPDATA%\Holster\apps\<id>.json` (temp file, then rename).
-2. Serve `/holster/health`, `/holster/preview` and (panel apps) `/holster/open` on a **loopback-only** listener (`127.0.0.1`).
-3. Make the preview page transparent, theme-aware (`?theme=` and the `theme` message), and sized to its content (manifest size, `resize` message for changes).
+2. Serve `/holster/health` and (panel apps) `/holster/open` on a **loopback-only** listener (`127.0.0.1`).
+3. If your app has something worth a glance, ship a preview page **on disk** (`preview.path`) so it shows even when the app is closed, and keep its data in a file next to it. Make it transparent, theme-aware, status-aware and sized to its content (1.5). No preview is fine too: the tile then shows nothing on hover.
 4. Panel apps: answer `POST /holster/open` fast, then slide your panel out. Window apps: be single-instance.
 5. Optional: `POST` an `activity` signal to Holster when something meaningful happens.
 6. Check your app in Holster's Settings, Apps: no error, no warnings, status "Running".
@@ -52,7 +52,7 @@ One manifest per app at `%APPDATA%\Holster\apps\<id>.json`. The file name **must
   "icon": { "lucide": "notebook-pen" },
   "color": "#B8A9F0",
   "health": "http://127.0.0.1:47321/holster/health",
-  "preview": { "url": "http://127.0.0.1:47321/holster/preview", "width": 320, "height": 260 },
+  "preview": { "path": "C:\\Path\\To\\Anotes\\holster-preview\\index.html", "width": 320, "height": 260 },
   "open": { "mode": "panel", "url": "http://127.0.0.1:47321/holster/open" },
   "launch": { "exe": "C:\\Path\\To\\Anotes.exe", "args": [] }
 }
@@ -62,16 +62,16 @@ One manifest per app at `%APPDATA%\Holster\apps\<id>.json`. The file name **must
 |---|---|---|
 | `schema` | yes | `1`. |
 | `id` | yes | Lowercase letters, digits, `-`, `_`, `.`; starts with a letter or digit; max 64. Equals the file name. |
-| `name` | yes | Shown in Settings and on the fallback card. |
-| `icon` | yes | `{ "lucide": "<name>" }` (a [lucide.dev](https://lucide.dev/icons) name, validated) or `{ "path": "<absolute path>" }` to a `.png`, `.svg`, `.jpg`, `.webp` or `.ico` of at most 1 MB. Prefer Lucide: it matches the family. |
-| `color` | yes | `#RGB` or `#RRGGBB`, or a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`). It fills the tile and tints the tab on signals. Pick a soft pastel (see 3.2). |
+| `name` | yes | Shown in Settings (and on the card that explains a failed open). |
+| `icon` | yes | Either `{ "lucide": "<name>" }`: a [lucide.dev](https://lucide.dev/icons) icon (validated), drawn by Holster on a tile in your `color`. Or `{ "path": "<absolute path>" }`: your own app icon (`.png`, `.svg`, `.jpg`, `.webp` or `.ico`, at most 1 MB) that **is the whole tile**, like an icon in a dock, with no colored square behind it. Design it as a square app icon (transparent corners are fine), at least 96 px. |
+| `color` | yes | `#RGB` or `#RRGGBB`, or a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`). It fills Lucide tiles, draws the hover halo, and tints the tab on signals. Pick a soft pastel (see 3.2). |
 | `health` | no | `GET` returns 2xx while the app runs. Strongly recommended. |
-| `preview` | no | `url` of the preview page; `width` 140–720 and `height` 64–720 CSS px (defaults 320×240; out-of-range values are clamped with a warning). No preview means the tile shows the fallback card. |
+| `preview` | no | `path`: absolute path to a preview page on disk (preferred: shows whether or not the app runs). `url`: a live page served by the running app (used while it runs; without a `path`, nothing shows while it's stopped). At least one of them. `width` 140–720 and `height` 64–720 CSS px (defaults 320×240; out-of-range values are clamped with a warning). No preview: the tile shows nothing on hover. |
 | `open.mode` | yes | `"panel"` (needs `open.url`) or `"window"` (needs `launch`). |
 | `open.url` | panel | Holster `POST`s here to open your panel. |
 | `launch` | window; recommended for panel | `exe`: absolute path. `args`: list of strings. Holster starts it when the app isn't running. |
 
-**Every URL must be `http://127.0.0.1[:port]/...`.** `localhost`, other hosts and `https` are rejected. A broken manifest never breaks Holster: it shows in Settings with the exact error (bad JSON, mismatched id, unknown icon, non-loopback URL, missing field). Warnings (missing exe, clamped size, panel without launch) show in amber.
+**Every URL must be `http://127.0.0.1[:port]/...`.** `localhost`, other hosts and `https` are rejected. A broken manifest never breaks Holster: it shows in Settings with the exact error (bad JSON, mismatched id, unknown icon, non-loopback URL, missing field). Warnings (missing exe, missing preview file, clamped size, panel without launch) show in amber.
 
 After writing the manifest you can ask Holster to validate it immediately: `POST {api}/apps/<id>/reload` answers `{ "ok": true, "warnings": [] }` or `422 { "ok": false, "error": "..." }`.
 
@@ -84,18 +84,29 @@ Polled once at start, on every manifest change, and every 2.5 s only while the d
 3. the `preview.url` returns 2xx, else
 4. unknown ("No status" in Settings).
 
-A running app gets a small dot beside its tile. A stopped app's tile shows the fallback card ("Not running") instead of the preview.
+A running app gets a small dot beside its tile. Your preview page is told too (1.5), so it can show its own state.
 
 ### 1.5 The preview page
 
 Shown in an iframe inside a card Holster draws (its material, hairline border, radius and shadow). Your page draws only the content.
 
-- **Loopback only**, served by your app.
+**Two kinds; use either or both:**
+
+- **On disk (`preview.path`), preferred.** Holster serves the page's folder itself, loopback only, at `http://127.0.0.1:<holster port>/apps/<id>/preview/<file>`, so the preview shows **whether or not your app is running**. Relative assets in that folder (CSS, JS, images, fonts, JSON) work; nothing outside it is served. Ship the page with your app (next to the exe or in its data folder). Keep what it shows in a data file beside it, such as `state.json`, which your app rewrites atomically when something changes. The page fetches it on load and on the `show` message.
+- **Live (`preview.url`).** Served by your running app on loopback. Holster uses it while the app runs and falls back to the `path` page otherwise. Without a `path`, a stopped app shows nothing on hover.
+
+Rules for both:
+
 - **Transparent background**: `html, body { background: transparent; }`. Never paint your own card, border, radius or shadow.
 - **Color scheme must match the theme.** Set `color-scheme: light` or `dark` on `:root` to follow the theme. If it differs from Holster's, Chromium paints an opaque backdrop behind your page.
-- **Theme**: the URL carries `?theme=light` or `?theme=dark`. Live changes arrive as a message: `{ "holster": "theme", "value": "dark" }`. Apply both without reloading.
+- **Query parameters**: `?theme=light|dark&running=1|0`. Apply both on load.
+- **Messages from Holster** (`message` events on `window`). Apply them without reloading:
+  - `{ "holster": "theme", "value": "dark" }`: the theme changed.
+  - `{ "holster": "status", "running": true }`: your app started or stopped.
+  - `{ "holster": "show" }`: the card is coming into view; refresh your data now.
 - **Size**: the manifest's `width`×`height` is the card size. To change it at runtime, post to the parent: `parent.postMessage({ holster: "resize", width: 320, height: 300 }, "*")`. Holster springs the card to the new size and keeps it on screen. Size to your content: never scroll, never clip.
-- **Light and fast**: Holster preloads every preview while the dock is open and keeps the pages alive for 20 s after it closes, so moving between tiles is a crossfade, never a reload. Render from local state; no spinners on hover; no heavy work on load. A page that hasn't loaded after 2.5 s gets the fallback card.
+- **Motion is Holster's**: the card slides out from behind the dock like a drawer, and your page rides its leading edge, fading in; on close it slides back and fades. Don't add your own entrance animation.
+- **Light and fast**: Holster preloads every preview while the dock is open and keeps the pages alive for 20 s after it closes, so moving between tiles is a crossfade, never a reload. Render from local data; no spinners on hover; no heavy work on load. A page that hasn't loaded after 2.5 s is skipped.
 - **Sandbox**: `allow-scripts allow-same-origin allow-forms`. No popups, no top-level navigation. Interactive controls are fine (it's your UI), but anything bigger belongs in your panel or window.
 - The preview hides when the cursor leaves both its tile and the card (after a 250 ms grace). Don't rely on hover-only states that need longer.
 
@@ -117,11 +128,24 @@ Template:
     </style>
   </head>
   <body>
-    <main><div class="label">Your app</div><!-- one glanceable thing --></main>
+    <main><div class="label">Your app</div><div id="body"><!-- one glanceable thing --></div></main>
     <script>
+      const q = new URLSearchParams(location.search);
       const setTheme = (t) => (document.documentElement.dataset.theme = t === "dark" ? "dark" : "light");
-      setTheme(new URLSearchParams(location.search).get("theme"));
-      addEventListener("message", (e) => e.data?.holster === "theme" && setTheme(e.data.value));
+      const setRunning = (on) => document.body.classList.toggle("running", on);
+      async function refresh() {
+        // On-disk previews: read the snapshot your app keeps next to this page.
+        const state = await fetch("state.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+        /* render state into #body */
+      }
+      setTheme(q.get("theme"));
+      setRunning(q.get("running") === "1");
+      refresh();
+      addEventListener("message", (e) => {
+        if (e.data?.holster === "theme") setTheme(e.data.value);
+        if (e.data?.holster === "status") setRunning(e.data.running);
+        if (e.data?.holster === "show") refresh();
+      });
     </script>
   </body>
 </html>
@@ -135,7 +159,7 @@ Template:
 - Answer `2xx` immediately (Holster waits at most 4 s), then open the panel on your UI thread.
 - Holster calls `AllowSetForegroundWindow(ASFW_ANY)` right before the request, so you may take the foreground. Still take focus the robust way (attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`), as Anotes does.
 - Not running: Holster runs `launch.exe`, waits up to 20 s for `health`, then calls `open.url`. Make `health` answer as soon as the open route works.
-- Failures show on the tile's card ("didn't respond to open", "couldn't open its panel (500)").
+- Failures show on a small card next to the tile ("didn't respond to open", "couldn't open its panel (500)"). It's the only card Holster draws on its own.
 
 **`window`**: Holster brings your main window forward if a process with your exe path is running and has a visible, unowned, titled top-level window (restoring it if minimized). Otherwise it runs `launch.exe launch.args` (working directory: the exe's folder). Be single-instance: a second launch should focus the first window and exit.
 
@@ -174,7 +198,6 @@ pub async fn serve_holster(app_handle: tauri::AppHandle) -> anyhow::Result<u16> 
     let open_handle = app_handle.clone();
     let router = Router::new()
         .route("/holster/health", get(|| async { "ok" }))
-        .route("/holster/preview", get(|| async { axum::response::Html(include_str!("preview.html")) }))
         .route("/holster/open", post(move |Json(body): Json<Value>| {
             let h = open_handle.clone();
             async move {
@@ -200,7 +223,9 @@ fn write_manifest(port: u16) -> anyhow::Result<()> {
         "schema": 1, "id": "my-app", "name": "My App",
         "icon": { "lucide": "sparkles" }, "color": "#89BCF2",
         "health": format!("{base}/health"),
-        "preview": { "url": format!("{base}/preview"), "width": 300, "height": 180 },
+        // Shipped next to the exe; the app rewrites state.json beside it.
+        "preview": { "path": std::env::current_exe()?.with_file_name("holster-preview").join("index.html"),
+                     "width": 300, "height": 180 },
         "open": { "mode": "panel", "url": format!("{base}/open") },
         "launch": { "exe": std::env::current_exe()?, "args": [] }
     });
@@ -215,7 +240,7 @@ fn write_manifest(port: u16) -> anyhow::Result<()> {
 }
 ```
 
-`examples/hello-holster` in the Holster repo is a complete, dependency-free example (std HTTP server, live-clock preview with a runtime resize, `window` mode, a Space-key signal).
+`examples/hello-holster` in the Holster repo is a complete, dependency-free example: an on-disk live-clock preview that follows the running state and resizes itself at runtime, a std HTTP health route, `window` mode, and a Space-key signal.
 
 ---
 
@@ -331,7 +356,7 @@ Ten pastels, each with a light and a dark swatch. Use `bg` for washes, `strong` 
 | apricot | `#FDEAD5` `#E99F55` `#764311` | `#3F2F1D` `#F3BA7F` `#FBE2C8` |
 | mist | `#E7EBF0` `#8897AB` `#374252` | `#292E36` `#A8B4C4` `#DDE2E9` |
 
-Your manifest `color` should sit in the dark-`strong` family (`#B2A2F5`, `#89BCF2`, `#7AD6AF`…): soft, light, saturated just enough. Holster draws the tile in that color with a 26%→0 white top gradient, an inner top highlight and a 1px inner hairline. The icon is a deep shade of the same hue (HSL lightness 24%) on light fills, or white on dark ones. Status colors: online `#3fbf7f` (with a 3px 16–18% halo), pending `#e2ab3f`, danger as `--danger`.
+For Lucide tiles, your manifest `color` should sit in the dark-`strong` family (`#B2A2F5`, `#89BCF2`, `#7AD6AF`…): soft, light, saturated just enough. Holster draws the tile in that color with a 26%→0 white top gradient, an inner top highlight and a 1px inner hairline. The icon is a deep shade of the same hue (HSL lightness 24%) on light fills, or white on dark ones. Status colors: online `#3fbf7f` (with a 3px 16–18% halo), pending `#e2ab3f`, danger as `--danger`.
 
 ### 3.3 Material
 
@@ -347,7 +372,7 @@ Every surface is a native window whose **bounds are the visible shape**: no tran
 
 Also: `DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND` for Windows 11 corners; subclass the window and answer `WM_NCACTIVATE` with `wParam = 1` so the acrylic keeps its active look; while a surface must not steal focus, set `WS_EX_NOACTIVATE` and answer `WM_MOUSEACTIVATE` with `MA_NOACTIVATE`. Re-apply the material on theme change.
 
-On top of the acrylic, content sits on `--veil`. Surfaces that touch the screen edge extend 10px (×scale) past it (the overhang), so only the inner corners are rounded. Skip the overhang when another monitor or a right-side taskbar is there. Lay content out with `right: overhang`.
+On top of the acrylic, content sits on `--veil`. Surfaces that grow a lot (Holster's preview and settings cards) bake the veil into the accent tint instead (dark `0xB01D1919`, light `0xC2F9F7F7`) and draw no CSS veil: the webview fills newly exposed edges a frame late, and with the veil in the material those edges already look finished. Surfaces that touch the screen edge extend 10px (×scale) past it (the overhang), so only the inner corners are rounded. Skip the overhang when another monitor or a right-side taskbar is there. Lay content out with `right: overhang`.
 
 ### 3.4 Geometry
 

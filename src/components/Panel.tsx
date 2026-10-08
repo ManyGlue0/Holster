@@ -9,7 +9,8 @@ import { SettingsPage } from "./Settings";
  *  reflowed (the Anotes panel technique). */
 export function Panel() {
   const shell = useStore((s) => s.shell);
-  const visible = shell.mode === "panel";
+  const leaving = useStore((s) => s.panelLeaving);
+  const visible = shell.mode === "panel" && !leaving;
 
   return (
     <div className="panel-root" style={{ width: `max(100%, ${shell.panelWidth}px)`, height: `max(100%, ${shell.panelHeight}px)` }}>

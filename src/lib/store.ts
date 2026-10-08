@@ -20,6 +20,8 @@ interface Store {
   toasts: Toast[];
   /** Keeps the settings panel open on click outside. Session only. */
   pinned: boolean;
+  /** The panel is fading out on its way back to the dock. */
+  panelLeaving: boolean;
 
   setShell: (s: ShellState) => void;
   refreshApps: () => Promise<void>;
@@ -54,12 +56,14 @@ export const useStore = create<Store>((set, get) => ({
   appsLoaded: false,
   toasts: [],
   pinned: false,
+  panelLeaving: false,
 
   setShell: (shell) =>
     set((s) => ({
       shell,
       surface: surfaceOf(shell.mode, s.surface),
-      pinned: shell.mode === "closing" || shell.mode === "closed" ? false : s.pinned,
+      pinned: shell.mode === "panel" || shell.mode === "expanding" ? s.pinned : false,
+      panelLeaving: shell.mode === "panel" ? s.panelLeaving : false,
     })),
   refreshApps: async () => set({ apps: await api.listApps(), appsLoaded: true }),
   loadSettings: async () => set({ settings: await api.getSettings() }),

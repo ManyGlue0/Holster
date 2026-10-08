@@ -4,6 +4,7 @@
 //! - `GET  /status`            `{ "running": true, "version": "..." }`
 //! - `POST /apps/{id}/signal`  `{ "kind": "activity" }` tints the tab in the app's color
 //! - `POST /apps/{id}/reload`  re-reads the manifests, answers with this app's result
+//! - `GET  /apps/{id}/preview/{file}` serves the app's on-disk preview folder
 //!
 //! Requests must name the loopback host (DNS-rebinding guard) and may only
 //! come from loopback origins when a browser sends them.
@@ -101,6 +102,66 @@ async fn reload(State(c): State<Ctx>, UrlPath(id): UrlPath<String>) -> Response 
     }
 }
 
+fn content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("html" | "htm") => "text/html; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("gif") => "image/gif",
+        Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+fn decode(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            out.push(u8::from_str_radix(s.get(i + 1..i + 3)?, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Files from an app's preview folder, never outside it.
+async fn preview_file(State(c): State<Ctx>, UrlPath((id, file)): UrlPath<(String, String)>) -> Response {
+    let Some(dir) = c.reg.preview_dir(&id) else { return unknown(&id) };
+    let Some(rel) = decode(&file) else { return (StatusCode::BAD_REQUEST, "Bad path").into_response() };
+    if rel.split(['/', '\\']).any(|seg| seg == ".." || seg.contains(':')) {
+        return (StatusCode::FORBIDDEN, "Outside the preview folder").into_response();
+    }
+    let path = dir.join(rel.replace('/', "\\"));
+    let inside = match (std::fs::canonicalize(&dir), std::fs::canonicalize(&path)) {
+        (Ok(d), Ok(p)) => p.starts_with(d),
+        _ => false,
+    };
+    if !inside {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
+    }
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [(header::CONTENT_TYPE, content_type(&path)), (header::CACHE_CONTROL, "no-store")],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+    }
+}
+
 pub fn discovery_path(dir: &Path) -> PathBuf {
     dir.join("holster.json")
 }
@@ -114,6 +175,7 @@ pub async fn start(dir: PathBuf, version: String, reg: Arc<Registry>, on_signal:
         .route("/status", get(status))
         .route("/apps/{id}/signal", post(signal))
         .route("/apps/{id}/reload", post(reload))
+        .route("/apps/{id}/preview/{*file}", get(preview_file))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not found") })
         .layer(middleware::from_fn_with_state(ctx.clone(), guard))
         .with_state(ctx);

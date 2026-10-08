@@ -8,16 +8,16 @@ It's made by the same hands as Anotes: same stack, same tokens, same materials, 
 
 - **Open the dock**: rest the cursor on the tab for a moment, click it, or press `Ctrl+Alt+Space` (change it in Settings; if another app already uses it, Settings says so).
 - **Close the dock**: click anywhere outside it, click its grip, press `Esc` or the shortcut again, or open an app. Moving the cursor away never closes it, so a mis-hover can't make it vanish under you.
-- **Previews**: rest on a tile. Move straight into the preview to use it (diagonal paths over other tiles are fine). Moving to another tile crossfades between previews.
+- **Previews**: rest on a tile. The preview slides out from behind the dock, even when the app isn't running (apps can ship their preview as a page on disk). Move straight into it to use it (diagonal paths over other tiles are fine). Moving to another tile crossfades between previews. Apps without a preview show nothing.
 - **More than five apps**: scroll the column with the wheel. It moves a whole tile at a time, with soft fades where more apps are hidden.
 - **Move it**: drag the tab, or the dock's grip, up or down.
-- **Settings**: the gear card below the dock, or the tray icon. Reorder apps by dragging, hide them from the dock, remove a manifest, or add one. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, and hover timing (under "Hover timing").
+- **Settings**: the gear card below the dock, or the tray icon. The back arrow returns to the dock. Reorder apps by dragging, hide them from the dock, remove a manifest, or add one. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, and hover timing (under "Hover timing").
 - **Game mode**: while a fullscreen app is in front, the tab tucks away and never takes focus. Activity glows wait until you're back.
 - **Ambient signal**: when an app reports activity, the tab glows in that app's color (or its tile pulses while the dock is open).
 
 ## Adding apps
 
-Apps register themselves by writing a manifest to `%APPDATA%\Holster\apps\<id>.json` when they start. Holster validates every manifest and watches the folder live; a broken one shows up in Settings with the exact error.
+Apps register themselves by writing a manifest to `%APPDATA%\Holster\apps\<id>.json` when they start. An app's icon is either a Lucide icon on a tile in its color, or its own image, which then is the whole tile. Holster validates every manifest and watches the folder live; a broken one shows up in Settings with the exact error.
 
 The whole contract, the required stack, and the design language with exact values are in one skill: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md). Give it to any agent that supports Agent Skills when you build or adapt an app.
 
@@ -32,6 +32,7 @@ Loopback only, on a random free port written to `%APPDATA%\Holster\holster.json`
 | `GET /status` | `{ "running": true, "version": "0.1.0" }` |
 | `POST /apps/{id}/signal` | body `{ "kind": "activity" }`: tints the tab in the app's color |
 | `POST /apps/{id}/reload` | re-reads the manifests, answers with that app's validation result |
+| `GET /apps/{id}/preview/{file}` | serves an app's on-disk preview folder (its `preview.path`), so previews work while the app is closed |
 
 Requests must name the loopback host (DNS-rebinding guard); browser requests must come from loopback origins.
 
@@ -79,4 +80,4 @@ Like Anotes, every surface is a frameless, always-on-top window whose **bounds a
 
 The dock opens on hover, so it never takes keyboard focus from what you're typing in. While it's open, low-level mouse and keyboard hooks (installed only for that time) notice a click outside Holster and the Escape key. The settings panel takes focus like the Anotes panel and closes when you click away.
 
-Previews are iframes on the apps' own loopback pages, laid over Holster's material. Every previewable app's page stays loaded while the dock is open (and for 20 seconds after), so moving between tiles is a crossfade, never a reload.
+Previews are iframes laid over Holster's material: an app's page on disk (served by Holster) or its live loopback page while it runs. Every preview stays loaded while the dock is open (and for 20 seconds after), so moving between tiles is a crossfade, never a reload. The card slides out from behind the dock like a drawer, the page riding its leading edge. The settings and preview cards stay shown but parked off screen when unused (a freshly shown window draws a hollow frame for its first frames), and they carry the veil in their native material, so edges the webview hasn't repainted yet never flicker.

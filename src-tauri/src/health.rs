@@ -73,8 +73,8 @@ impl Health {
             let running = tokio::task::spawn_blocking(move || !process::pids_for(&exe).is_empty()).await.unwrap_or(false);
             return if running { Status::Running } else { Status::Stopped };
         }
-        if let Some(p) = &m.preview {
-            return match self.client.get(&p.url).send().await {
+        if let Some(url) = m.preview.as_ref().and_then(|p| p.url.as_ref()) {
+            return match self.client.get(url).send().await {
                 Ok(r) if r.status().is_success() => Status::Running,
                 _ => Status::Stopped,
             };

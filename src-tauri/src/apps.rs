@@ -19,7 +19,7 @@ pub const SCHEMA: u64 = 1;
 /// Preview size limits in CSS px. Apps choose within these.
 pub const PREVIEW_MIN: (f64, f64) = (140.0, 64.0);
 pub const PREVIEW_MAX: (f64, f64) = (720.0, 720.0);
-/// The card shown when an app has no preview or isn't running.
+/// The card that explains why opening an app failed.
 pub const FALLBACK_SIZE: (f64, f64) = (248.0, 76.0);
 
 const PALETTE: [&str; 10] = ["mint", "peach", "lavender", "sky", "butter", "rose", "sage", "lilac", "apricot", "mist"];
@@ -38,9 +38,12 @@ pub enum OpenMode {
     Window,
 }
 
+/// A preview is a static page on disk (shown whether or not the app runs,
+/// served by Holster) and/or a live page served by the running app.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Preview {
-    pub url: String,
+    pub path: Option<PathBuf>,
+    pub url: Option<String>,
     pub width: f64,
     pub height: f64,
 }
@@ -94,7 +97,10 @@ pub struct AppView {
     pub color: String,
     pub mode: Option<OpenMode>,
     pub has_preview: bool,
+    /// The live page, served by the app while it runs.
     pub preview_url: Option<String>,
+    /// The page on disk, served by Holster (works when the app isn't running).
+    pub preview_file: Option<String>,
     pub can_launch: bool,
     /// Holster has a way to tell whether it's running (health, launch or preview).
     pub trackable: bool,
@@ -230,9 +236,22 @@ pub fn parse(text: &str, stem: &str) -> (Result<Manifest, String>, Vec<String>) 
         let preview = match v.get("preview") {
             None | Some(Value::Null) => None,
             Some(p) => {
-                let url = str_field(p, "url", "preview.")?.ok_or("preview.url is missing")?.to_string();
-                if !loopback_url(&url) {
+                let url = str_field(p, "url", "preview.")?.map(str::to_string);
+                if url.as_deref().is_some_and(|u| !loopback_url(u)) {
                     return Err("preview.url must be an http://127.0.0.1 URL".into());
+                }
+                let mut path = str_field(p, "path", "preview.")?.map(PathBuf::from);
+                if path.is_none() && url.is_none() {
+                    return Err("preview needs a \"path\" (a page on disk) or a \"url\" (a live page)".into());
+                }
+                if let Some(f) = &path {
+                    if !f.is_absolute() {
+                        return Err("preview.path must be an absolute path".into());
+                    }
+                    if !f.is_file() {
+                        warnings.push(format!("preview.path wasn't found at {}", f.display()));
+                        path = None;
+                    }
                 }
                 let dim = |k: &str, min: f64, max: f64, def: f64, warnings: &mut Vec<String>| -> Result<f64, String> {
                     match p.get(k) {
@@ -249,7 +268,7 @@ pub fn parse(text: &str, stem: &str) -> (Result<Manifest, String>, Vec<String>) 
                 };
                 let width = dim("width", PREVIEW_MIN.0, PREVIEW_MAX.0, 320.0, &mut warnings)?;
                 let height = dim("height", PREVIEW_MIN.1, PREVIEW_MAX.1, 240.0, &mut warnings)?;
-                Some(Preview { url, width, height })
+                (path.is_some() || url.is_some()).then_some(Preview { path, url, width, height })
             }
         };
 
@@ -342,6 +361,8 @@ pub struct Registry {
     status: RwLock<HashMap<String, Status>>,
     /// Preview sizes requested at runtime by the preview page (postMessage).
     preview_size: RwLock<HashMap<String, (f64, f64)>>,
+    /// Holster's API port, for the URLs of on-disk previews.
+    api_port: std::sync::atomic::AtomicU16,
     on_change: Box<dyn Fn() + Send + Sync>,
 }
 
@@ -353,6 +374,7 @@ impl Registry {
             entries: RwLock::new(Vec::new()),
             status: RwLock::new(HashMap::new()),
             preview_size: RwLock::new(HashMap::new()),
+            api_port: std::sync::atomic::AtomicU16::new(0),
             on_change: Box::new(on_change),
         });
         me.reload();
@@ -417,6 +439,16 @@ impl Registry {
         }
     }
 
+    pub fn set_api_port(&self, port: u16) {
+        self.api_port.store(port, std::sync::atomic::Ordering::SeqCst);
+        (self.on_change)();
+    }
+
+    /// The folder an on-disk preview is served from.
+    pub fn preview_dir(&self, id: &str) -> Option<PathBuf> {
+        self.manifest(id)?.preview?.path?.parent().map(Path::to_path_buf)
+    }
+
     /// The preview size to show: runtime request, else the manifest's.
     pub fn preview_size(&self, id: &str) -> Option<(f64, f64)> {
         if let Some(s) = self.preview_size.read().unwrap().get(id) {
@@ -457,9 +489,14 @@ impl Registry {
                         color: m.color.clone(),
                         mode: Some(m.mode),
                         has_preview: m.preview.is_some(),
-                        preview_url: m.preview.as_ref().map(|p| p.url.clone()),
+                        preview_url: m.preview.as_ref().and_then(|p| p.url.clone()),
+                        preview_file: m.preview.as_ref().and_then(|p| p.path.as_ref()).and_then(|f| {
+                            let port = self.api_port.load(std::sync::atomic::Ordering::SeqCst);
+                            let name = f.file_name()?.to_string_lossy().to_string();
+                            (port != 0).then(|| format!("http://127.0.0.1:{port}/apps/{}/preview/{}", e.id, encode_segment(&name)))
+                        }),
                         can_launch: m.launch.is_some(),
-                        trackable: m.health.is_some() || m.launch.is_some() || m.preview.is_some(),
+                        trackable: m.health.is_some() || m.launch.is_some() || m.preview.as_ref().is_some_and(|p| p.url.is_some()),
                         status: status.get(&e.id).copied().unwrap_or(Status::Unknown),
                         error: None,
                         warnings: e.warnings.clone(),
@@ -475,6 +512,7 @@ impl Registry {
                         mode: None,
                         has_preview: false,
                         preview_url: None,
+                        preview_file: None,
                         can_launch: false,
                         trackable: false,
                         status: Status::Unknown,
@@ -500,6 +538,16 @@ impl Registry {
     pub fn dock_count(&self, settings: &Settings) -> usize {
         self.views(settings).iter().filter(|v| v.error.is_none() && !v.hidden).count()
     }
+}
+
+/// Percent-encodes one URL path segment.
+fn encode_segment(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 /// Watches the apps folder and reloads on any change, debounced.
@@ -570,6 +618,19 @@ mod tests {
         assert_eq!(m.mode, OpenMode::Panel);
         assert_eq!(m.preview.unwrap().width, 320.0);
         assert!(w.is_empty(), "{w:?}");
+    }
+
+    #[test]
+    fn previews_need_a_page() {
+        let none = GOOD.replace(r#""url": "http://127.0.0.1:47321/holster/preview", "#, "");
+        assert!(parse(&none, "anotes").0.unwrap_err().contains("preview needs"));
+        let missing = GOOD.replace(
+            r#""url": "http://127.0.0.1:47321/holster/preview""#,
+            r#""path": "C:\\nope\\preview.html""#,
+        );
+        let (m, w) = parse(&missing, "anotes");
+        assert!(m.unwrap().preview.is_none());
+        assert_eq!(w.len(), 1);
     }
 
     #[test]

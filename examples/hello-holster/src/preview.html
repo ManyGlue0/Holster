@@ -55,9 +55,19 @@
         width: 6px;
         height: 6px;
         border-radius: 50%;
+        background: var(--text-3);
+        opacity: 0.6;
+        transition: background 0.3s ease, opacity 0.3s ease;
+      }
+      .running .live {
         background: var(--tint);
+        opacity: 1;
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--tint) 22%, transparent);
         animation: breathe 2s ease-in-out infinite;
+      }
+      .state {
+        margin-left: auto;
+        font-weight: 400;
       }
       @keyframes breathe {
         50% {
@@ -127,7 +137,7 @@
   </head>
   <body>
     <main id="card">
-      <div class="head"><span class="live"></span>Hello Holster</div>
+      <div class="head"><span class="live"></span>Hello Holster<span class="state" id="state"></span></div>
       <div class="time"><span id="hm">--:--</span><span class="secs" id="s">:--</span></div>
       <div class="row">
         <span id="date"></span>
@@ -139,8 +149,17 @@
       // Follow Holster's theme: the query parameter first, then live messages.
       const setTheme = (t) => (document.documentElement.dataset.theme = t === "dark" ? "dark" : "light");
       setTheme(new URLSearchParams(location.search).get("theme"));
+      // Holster also says whether the app is running: this page is on disk,
+      // so it shows even when the app is closed.
+      const setRunning = (on) => {
+        document.body.classList.toggle("running", on);
+        document.getElementById("state").textContent = on ? "" : "Not running";
+      };
+      setRunning(new URLSearchParams(location.search).get("running") === "1");
       addEventListener("message", (e) => {
-        if (e.data && e.data.holster === "theme") setTheme(e.data.value);
+        if (!e.data) return;
+        if (e.data.holster === "theme") setTheme(e.data.value);
+        if (e.data.holster === "status") setRunning(e.data.running);
       });
 
       const ZONES = [

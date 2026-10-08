@@ -90,7 +90,7 @@ fn apply_theme(app: &AppHandle, theme: &str) {
 fn apply_material(w: &tauri::WebviewWindow) {
     let dark = w.theme().map(|t| t == Theme::Dark).unwrap_or(false);
     if let Ok(hwnd) = w.hwnd() {
-        if !shell::apply_material(hwnd.0 as isize, dark) {
+        if !shell::apply_material(hwnd.0 as isize, dark, w.label() != "main") {
             let tint = if dark { (28, 26, 26, 160) } else { (244, 244, 246, 160) };
             let _ = window_vibrancy::apply_blur(w, Some(tint));
         }
@@ -277,7 +277,10 @@ pub fn run() {
                 })
                 .await;
                 match result {
-                    Ok(port) => *api_core.port.write().unwrap() = port,
+                    Ok(port) => {
+                        *api_core.port.write().unwrap() = port;
+                        api_core.reg.set_api_port(port);
+                    }
                     Err(e) => eprintln!("Holster API failed to start: {e}"),
                 }
             });

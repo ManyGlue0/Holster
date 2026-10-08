@@ -58,7 +58,10 @@ export interface AppView {
   color: string;
   mode: "panel" | "window" | null;
   hasPreview: boolean;
+  /** Live page, served by the app while it runs. */
   previewUrl: string | null;
+  /** Page on disk, served by Holster; shows whether or not the app runs. */
+  previewFile: string | null;
   canLaunch: boolean;
   trackable: boolean;
   status: AppStatus;
