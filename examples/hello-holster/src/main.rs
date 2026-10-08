@@ -230,7 +230,7 @@ unsafe fn paint(hwnd: HWND) {
     let mut r = RECT { left: pad, top: px(24.0), right: w - pad, bottom: h };
     SelectObject(mem, small as _);
     SetTextColor(mem, fg3);
-    text(mem, "HELLO HOLSTER", &mut r, DT_LEFT | DT_TOP | DT_SINGLELINE);
+    text(mem, "Hello Holster", &mut r, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
     // A small dot in the app's color, like the preview's live dot.
     let dot = CreateSolidBrush(accent);
