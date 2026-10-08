@@ -64,8 +64,20 @@ export const LucideIcon = memo(function LucideIcon({
   );
 });
 
-/** An app's icon: its Lucide icon, or its image file. */
-export function AppIcon({ app, size = 22 }: { app: Pick<AppView, "lucide" | "image">; size?: number }) {
-  if (app.image) return <img className="app-image" src={app.image} width={size} height={size} alt="" draggable={false} />;
+/** An app's icon on a tile of `tile` px: its Lucide icon at `size` px, or
+ *  its image covering the app's chosen share of the tile (default 80%). */
+export function AppIcon({
+  app,
+  size = 22,
+  tile,
+}: {
+  app: Pick<AppView, "lucide" | "image" | "imageSize">;
+  size?: number;
+  tile: number;
+}) {
+  if (app.image) {
+    const px = Math.round((tile * app.imageSize) / 100);
+    return <img className="app-image" src={app.image} width={px} height={px} alt="" draggable={false} />;
+  }
   return <LucideIcon name={app.lucide ?? "app-window"} size={size} strokeWidth={1.9} />;
 }

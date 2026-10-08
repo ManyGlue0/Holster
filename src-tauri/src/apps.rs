@@ -27,8 +27,9 @@ const PALETTE: [&str; 10] = ["mint", "peach", "lavender", "sky", "butter", "rose
 #[derive(Debug, Clone, PartialEq)]
 pub enum Icon {
     Lucide(String),
-    /// Image file rendered as a data URL (the webview can't read local paths).
-    Image(String),
+    /// Image file rendered as a data URL (the webview can't read local
+    /// paths), drawn on the tile at `size` percent of the tile.
+    Image(String, f64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -94,6 +95,8 @@ pub struct AppView {
     pub lucide: Option<String>,
     /// Data URL, when the icon is an image file.
     pub image: Option<String>,
+    /// How much of the tile the image covers, in percent.
+    pub image_size: f64,
     pub color: String,
     pub mode: Option<OpenMode>,
     pub has_preview: bool,
@@ -166,6 +169,23 @@ fn image_data_url(path: &Path) -> Result<String, String> {
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
+/// `icon.size`: how much of the tile the image covers, as a percentage
+/// ("80%", or a bare 80). Defaults to 80%.
+pub const ICON_SIZE_DEFAULT: f64 = 80.0;
+
+fn icon_size(v: Option<&Value>) -> Result<f64, String> {
+    let pct = match v {
+        None | Some(Value::Null) => return Ok(ICON_SIZE_DEFAULT),
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(Value::String(s)) => s.trim().strip_suffix('%').and_then(|n| n.trim().parse::<f64>().ok()),
+        Some(_) => None,
+    };
+    match pct {
+        Some(p) if (10.0..=100.0).contains(&p) => Ok(p),
+        _ => Err("icon.size must be a percentage of the tile between 10% and 100%, like \"80%\"".into()),
+    }
+}
+
 fn str_field<'a>(v: &'a Value, key: &str, ctx: &str) -> Result<Option<&'a str>, String> {
     match v.get(key) {
         None | Some(Value::Null) => Ok(None),
@@ -210,8 +230,9 @@ pub fn parse(text: &str, stem: &str) -> (Result<Manifest, String>, Vec<String>) 
             if !path.is_absolute() {
                 return Err("icon.path must be an absolute path".into());
             }
+            let size = icon_size(icon_v.get("size"))?;
             match image_data_url(path) {
-                Ok(d) => Icon::Image(d),
+                Ok(d) => Icon::Image(d, size),
                 Err(e) => {
                     warnings.push(format!("{e}; showing a default icon"));
                     Icon::Lucide("app-window".into())
@@ -480,11 +501,15 @@ impl Registry {
                         name: m.name.clone(),
                         lucide: match &m.icon {
                             Icon::Lucide(n) => Some(n.clone()),
-                            Icon::Image(_) => None,
+                            Icon::Image(..) => None,
                         },
                         image: match &m.icon {
-                            Icon::Image(d) => Some(d.clone()),
+                            Icon::Image(d, _) => Some(d.clone()),
                             Icon::Lucide(_) => None,
+                        },
+                        image_size: match &m.icon {
+                            Icon::Image(_, size) => *size,
+                            Icon::Lucide(_) => ICON_SIZE_DEFAULT,
                         },
                         color: m.color.clone(),
                         mode: Some(m.mode),
@@ -508,6 +533,7 @@ impl Registry {
                         name: e.id.clone(),
                         lucide: Some("circle-alert".into()),
                         image: None,
+                        image_size: ICON_SIZE_DEFAULT,
                         color: "mist".into(),
                         mode: None,
                         has_preview: false,
@@ -618,6 +644,15 @@ mod tests {
         assert_eq!(m.mode, OpenMode::Panel);
         assert_eq!(m.preview.unwrap().width, 320.0);
         assert!(w.is_empty(), "{w:?}");
+    }
+
+    #[test]
+    fn icon_size_is_a_percentage() {
+        assert_eq!(icon_size(None).unwrap(), 80.0);
+        assert_eq!(icon_size(Some(&serde_json::json!("65%"))).unwrap(), 65.0);
+        assert_eq!(icon_size(Some(&serde_json::json!(90))).unwrap(), 90.0);
+        assert!(icon_size(Some(&serde_json::json!("40px"))).is_err());
+        assert!(icon_size(Some(&serde_json::json!("150%"))).is_err());
     }
 
     #[test]

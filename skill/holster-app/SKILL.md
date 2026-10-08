@@ -63,8 +63,8 @@ One manifest per app at `%APPDATA%\Holster\apps\<id>.json`. The file name **must
 | `schema` | yes | `1`. |
 | `id` | yes | Lowercase letters, digits, `-`, `_`, `.`; starts with a letter or digit; max 64. Equals the file name. |
 | `name` | yes | Shown in Settings (and on the card that explains a failed open). |
-| `icon` | yes | Either `{ "lucide": "<name>" }`: a [lucide.dev](https://lucide.dev/icons) icon (validated), drawn by Holster on a tile in your `color`. Or `{ "path": "<absolute path>" }`: your own app icon (`.png`, `.svg`, `.jpg`, `.webp` or `.ico`, at most 1 MB) that **is the whole tile**, like an icon in a dock, with no colored square behind it. Design it as a square app icon (transparent corners are fine), at least 96 px. |
-| `color` | yes | `#RGB` or `#RRGGBB`, or a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`). It fills Lucide tiles, draws the hover halo, and tints the tab on signals. Pick a soft pastel (see 3.2). |
+| `icon` | yes | Either `{ "lucide": "<name>" }`: a [lucide.dev](https://lucide.dev/icons) icon (validated), drawn by Holster on a tile in your `color`. Or `{ "path": "<absolute path>", "size": "80%" }`: your own image (`.png`, `.svg`, `.jpg`, `.webp` or `.ico`, at most 1 MB) drawn on the same tile (your `color`, gloss and hairline stay). `size` is how much of the tile it covers, as a percentage from `"10%"` to `"100%"` (a bare `80` also reads as a percentage; never pixels); default `"80%"`. Use a square image with transparent background, at least 96 px. |
+| `color` | yes | `#RGB` or `#RRGGBB`, or a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`). It fills the tile, draws the hover halo, and tints the tab on signals. Pick a soft pastel (see 3.2). |
 | `health` | no | `GET` returns 2xx while the app runs. Strongly recommended. |
 | `preview` | no | `path`: absolute path to a preview page on disk (preferred: shows whether or not the app runs). `url`: a live page served by the running app (used while it runs; without a `path`, nothing shows while it's stopped). At least one of them. `width` 140–720 and `height` 64–720 CSS px (defaults 320×240; out-of-range values are clamped with a warning). No preview: the tile shows nothing on hover. |
 | `open.mode` | yes | `"panel"` (needs `open.url`) or `"window"` (needs `launch`). |
@@ -356,7 +356,7 @@ Ten pastels, each with a light and a dark swatch. Use `bg` for washes, `strong` 
 | apricot | `#FDEAD5` `#E99F55` `#764311` | `#3F2F1D` `#F3BA7F` `#FBE2C8` |
 | mist | `#E7EBF0` `#8897AB` `#374252` | `#292E36` `#A8B4C4` `#DDE2E9` |
 
-For Lucide tiles, your manifest `color` should sit in the dark-`strong` family (`#B2A2F5`, `#89BCF2`, `#7AD6AF`…): soft, light, saturated just enough. Holster draws the tile in that color with a 26%→0 white top gradient, an inner top highlight and a 1px inner hairline. The icon is a deep shade of the same hue (HSL lightness 24%) on light fills, or white on dark ones. Status colors: online `#3fbf7f` (with a 3px 16–18% halo), pending `#e2ab3f`, danger as `--danger`.
+Your manifest `color` should sit in the dark-`strong` family (`#B2A2F5`, `#89BCF2`, `#7AD6AF`…): soft, light, saturated just enough. Holster draws the tile in that color with a 26%→0 white top gradient, an inner top highlight and a 1px inner hairline. A Lucide icon is drawn 22 px in a deep shade of the same hue (HSL lightness 24%) on light fills, or white on dark ones. An image icon is drawn at its `size` share of the tile, untinted, so pick a `color` it reads well on. Status colors: online `#3fbf7f` (with a 3px 16–18% halo), pending `#e2ab3f`, danger as `--danger`.
 
 ### 3.3 Material
 

@@ -314,22 +314,11 @@ code {
   display: grid;
   place-items: center;
 }
-/* A custom icon is the whole tile, like an app icon: no fill, no frame. */
-.tile.has-image,
-.app-tile.has-image {
-  background: none;
-  box-shadow: none;
-}
-.tile.has-image .app-image {
-  border-radius: 12px;
-}
-.app-tile.has-image .app-image {
-  border-radius: 9px;
-}
+/* Custom icons sit on the tile like Lucide icons do, at the app's chosen
+   share of it (icon.size, default 80%). The tile keeps its fill and gloss. */
 .app-image {
   display: block;
   object-fit: contain;
-  border-radius: 7px;
   -webkit-user-drag: none;
 }
 .tile-dot {
@@ -465,10 +454,6 @@ code {
     linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 58%),
     var(--tile);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), inset 0 0 0 1px rgba(20, 20, 40, 0.06);
-}
-.open-error-tile:has(.app-image) {
-  background: none;
-  box-shadow: none;
 }
 .open-error-text {
   display: flex;

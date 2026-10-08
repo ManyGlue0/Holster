@@ -247,10 +247,10 @@ function AppRow({ app }: { app: AppView }) {
           <GripVertical size={14} />
         </span>
         <span
-          className={`app-tile ${app.error ? "broken" : ""} ${app.image ? "has-image" : ""}`}
+          className={`app-tile ${app.error ? "broken" : ""}`}
           style={app.error ? undefined : tileVars(app.color)}
         >
-          <AppIcon app={app} size={app.image ? 32 : 15} />
+          <AppIcon app={app} size={15} tile={32} />
         </span>
         <span className="app-text">
           <span className="app-name">{app.name}</span>

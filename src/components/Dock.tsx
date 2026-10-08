@@ -135,7 +135,7 @@ function Tile({
 }) {
   return (
     <motion.button
-      className={`tile ${active ? "active" : ""} ${launching ? "launching" : ""} ${app.image ? "has-image" : ""}`}
+      className={`tile ${active ? "active" : ""} ${launching ? "launching" : ""}`}
       data-app={app.id}
       aria-label={`${app.name}${app.status === "running" ? ", running" : ""}`}
       style={{ ...tileVars(app.color), width: TILE, height: TILE }}
@@ -148,7 +148,7 @@ function Tile({
       onClick={(e) => onOpen(app, e.currentTarget)}
     >
       <span className="tile-face">
-        <AppIcon app={app} size={app.image ? TILE : 22} />
+        <AppIcon app={app} size={22} tile={TILE} />
       </span>
       <AnimatePresence>
         {launching && (

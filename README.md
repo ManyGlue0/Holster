@@ -17,7 +17,7 @@ It's made by the same hands as Anotes: same stack, same tokens, same materials, 
 
 ## Adding apps
 
-Apps register themselves by writing a manifest to `%APPDATA%\Holster\apps\<id>.json` when they start. An app's icon is either a Lucide icon on a tile in its color, or its own image, which then is the whole tile. Holster validates every manifest and watches the folder live; a broken one shows up in Settings with the exact error.
+Apps register themselves by writing a manifest to `%APPDATA%\Holster\apps\<id>.json` when they start. An app's tile is drawn in its color with Holster's gloss, and carries either a Lucide icon or the app's own image at a chosen share of the tile (`"size": "80%"` by default). Holster validates every manifest and watches the folder live; a broken one shows up in Settings with the exact error.
 
 The whole contract, the required stack, and the design language with exact values are in one skill: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md). Give it to any agent that supports Agent Skills when you build or adapt an app.
 

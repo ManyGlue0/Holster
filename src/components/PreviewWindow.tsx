@@ -150,7 +150,7 @@ export function PreviewWindow() {
             exit={{ opacity: 0, transition: vanish }}
           >
             <span className="open-error-tile" style={tileVars(active.color)}>
-              <AppIcon app={active} size={active.image ? 42 : 20} />
+              <AppIcon app={active} size={20} tile={42} />
             </span>
             <span className="open-error-text">
               <span className="open-error-name">{active.name}</span>

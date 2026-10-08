@@ -55,6 +55,8 @@ export interface AppView {
   name: string;
   lucide: string | null;
   image: string | null;
+  /** How much of the tile the image covers, in percent. */
+  imageSize: number;
   color: string;
   mode: "panel" | "window" | null;
   hasPreview: boolean;
