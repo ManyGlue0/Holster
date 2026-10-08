@@ -203,6 +203,7 @@ function statusOf(app: AppView): { dot: DotState; label: string } {
   if (app.error) return { dot: "error", label: "Manifest error" };
   if (app.status === "running") return { dot: "online", label: "Running" };
   if (app.status === "stopped") return { dot: "off", label: "Not running" };
+  if (!app.trackable) return { dot: "off", label: "No status" };
   return { dot: "idle", label: "Checking…" };
 }
 
@@ -291,9 +292,11 @@ function AppRow({ app }: { app: AppView }) {
               {w}
             </p>
           ))}
-          <p className="app-file" title={app.file}>
-            {app.file}
-          </p>
+          {app.error && (
+            <p className="app-file" title={app.file}>
+              {app.file}
+            </p>
+          )}
         </div>
       )}
     </motion.div>

@@ -347,9 +347,12 @@ code {
   overflow: visible;
   pointer-events: none;
 }
+.tile.launching::before {
+  opacity: 0.35;
+}
 .tile-spinner rect {
   fill: none;
-  stroke: var(--tile);
+  stroke: color-mix(in srgb, var(--tile) 55%, var(--text));
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 22 78;

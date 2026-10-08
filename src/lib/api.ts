@@ -60,6 +60,7 @@ export interface AppView {
   hasPreview: boolean;
   previewUrl: string | null;
   canLaunch: boolean;
+  trackable: boolean;
   status: AppStatus;
   error: string | null;
   warnings: string[];

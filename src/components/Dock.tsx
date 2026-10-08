@@ -135,7 +135,7 @@ function Tile({
 }) {
   return (
     <motion.button
-      className={`tile ${active ? "active" : ""} ${app.image ? "has-image" : ""}`}
+      className={`tile ${active ? "active" : ""} ${launching ? "launching" : ""} ${app.image ? "has-image" : ""}`}
       data-app={app.id}
       aria-label={`${app.name}${app.status === "running" ? ", running" : ""}`}
       style={{ ...tileVars(app.color), width: TILE, height: TILE }}
@@ -169,9 +169,9 @@ function Tile({
         <motion.span
           key={pulse}
           className="tile-pulse"
-          initial={{ opacity: 0.85, scale: 1 }}
-          animate={{ opacity: 0, scale: 1.28 }}
-          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.9, 0.9, 0] }}
+          transition={{ duration: 2.2, times: [0, 0.12, 0.35, 1], ease: "easeInOut" }}
         />
       )}
       <motion.span

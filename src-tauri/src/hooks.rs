@@ -124,7 +124,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
 unsafe extern "system" fn key_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let info = &*(lparam as *const KBDLLHOOKSTRUCT);
-        if info.vkCode == VK_ESCAPE as u32 && info.flags & LLKHF_INJECTED == 0 {
+        if info.vkCode == VK_ESCAPE as u32 {
             match wparam as u32 {
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
                     SWALLOW_ESC_UP.store(true, Ordering::SeqCst);

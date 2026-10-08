@@ -96,6 +96,8 @@ pub struct AppView {
     pub has_preview: bool,
     pub preview_url: Option<String>,
     pub can_launch: bool,
+    /// Holster has a way to tell whether it's running (health, launch or preview).
+    pub trackable: bool,
     pub status: Status,
     pub error: Option<String>,
     pub warnings: Vec<String>,
@@ -457,6 +459,7 @@ impl Registry {
                         has_preview: m.preview.is_some(),
                         preview_url: m.preview.as_ref().map(|p| p.url.clone()),
                         can_launch: m.launch.is_some(),
+                        trackable: m.health.is_some() || m.launch.is_some() || m.preview.is_some(),
                         status: status.get(&e.id).copied().unwrap_or(Status::Unknown),
                         error: None,
                         warnings: e.warnings.clone(),
@@ -473,6 +476,7 @@ impl Registry {
                         has_preview: false,
                         preview_url: None,
                         can_launch: false,
+                        trackable: false,
                         status: Status::Unknown,
                         error: Some(err.clone()),
                         warnings: Vec::new(),
@@ -482,7 +486,13 @@ impl Registry {
             })
             .collect();
         let rank = |id: &str| settings.order.iter().position(|o| o == id).unwrap_or(usize::MAX);
-        views.sort_by(|a, b| rank(&a.id).cmp(&rank(&b.id)).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        // User order first; new apps by name; broken manifests last.
+        views.sort_by(|a, b| {
+            rank(&a.id)
+                .cmp(&rank(&b.id))
+                .then_with(|| a.error.is_some().cmp(&b.error.is_some()))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         views
     }
 

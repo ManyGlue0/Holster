@@ -9,6 +9,12 @@ import { GearWindow } from "./components/GearWindow";
 import { PreviewWindow } from "./components/PreviewWindow";
 
 const label = getCurrentWindow().label;
+
+function retry(fn: () => Promise<unknown>, attempt = 0) {
+  fn().catch(() => {
+    if (attempt < 50) setTimeout(() => retry(fn, attempt + 1), 60 + attempt * 20);
+  });
+}
 document.documentElement.dataset.window = label;
 
 /** One bundle, three windows: each renders its own surface over shared state. */
@@ -17,10 +23,12 @@ export default function App() {
 
   useEffect(() => {
     const s = useStore.getState();
-    api.shellState().then(s.setShell);
-    api.previewState().then((preview) => useStore.setState({ preview }));
-    s.loadSettings();
-    s.refreshApps();
+    // The main window can load before the backend has finished setting up:
+    // retry the first reads until it answers.
+    retry(() => api.shellState().then(s.setShell));
+    retry(() => api.previewState().then((preview) => useStore.setState({ preview })));
+    retry(s.loadSettings);
+    retry(s.refreshApps);
     // Warm the icon set after first paint; the tab doesn't need it.
     setTimeout(loadIcons, 200);
 
