@@ -1,0 +1,1093 @@
+/* ==========================================================================
+   Holster: calm, native, pastel. Made by the same hands as Anotes.
+   Every window carries real acrylic; everything here sits on top of it.
+   ========================================================================== */
+
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --veil: rgba(249, 249, 251, 0.6);
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-strong: rgba(255, 255, 255, 0.92);
+  --hover: rgba(20, 20, 40, 0.05);
+  --press: rgba(20, 20, 40, 0.08);
+  --border: rgba(20, 20, 40, 0.08);
+  --border-strong: rgba(20, 20, 40, 0.14);
+  --text: #1a1a1f;
+  --text-2: #55555f;
+  --text-3: #8b8b95;
+  --accent: #6b5bd2;
+  --accent-soft: rgba(107, 91, 210, 0.12);
+  --focus: rgba(107, 91, 210, 0.32);
+  --danger: #d4495b;
+  --warn: #b7791f;
+  --pop-bg: rgba(252, 252, 254, 0.97);
+  --shadow-card: 0 1px 1px rgba(20, 20, 40, 0.03), 0 2px 6px rgba(20, 20, 40, 0.04);
+  --shadow-lift: 0 2px 4px rgba(20, 20, 40, 0.05), 0 12px 28px rgba(20, 20, 40, 0.1);
+  --shadow-pop: 0 10px 34px rgba(20, 20, 40, 0.16), 0 2px 8px rgba(20, 20, 40, 0.06);
+  --code-bg: rgba(20, 20, 40, 0.045);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --veil: rgba(24, 24, 28, 0.52);
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-strong: rgba(48, 48, 54, 0.96);
+  --hover: rgba(255, 255, 255, 0.06);
+  --press: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f2f2f5;
+  --text-2: #b4b4be;
+  --text-3: #85858f;
+  --accent: #a596f5;
+  --accent-soft: rgba(165, 150, 245, 0.16);
+  --focus: rgba(165, 150, 245, 0.38);
+  --danger: #f0798a;
+  --warn: #e9b65c;
+  --pop-bg: rgba(44, 44, 50, 0.97);
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.12);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.18), 0 12px 28px rgba(0, 0, 0, 0.32);
+  --shadow-pop: 0 10px 34px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --code-bg: rgba(255, 255, 255, 0.06);
+
+  color-scheme: dark;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: ease;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* Explicitly transparent: the acrylic window material shows through. */
+  background: transparent;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--focus);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+/* ---- Tab ---------------------------------------------------------------- */
+
+.tab {
+  position: fixed;
+  inset: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+/* Game mode: the content fades while the window retracts into the edge. */
+.tab.tucked {
+  pointer-events: none;
+}
+.tab.tucked > * {
+  opacity: 0 !important;
+  transition: opacity 0.14s ease;
+}
+.tab-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 55%, rgba(255, 255, 255, 0.14));
+  transition: opacity 0.25s ease;
+}
+:root[data-theme="dark"] .tab-sheen {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 55%, rgba(255, 255, 255, 0.05));
+}
+.tab:hover .tab-sheen {
+  filter: brightness(1.08);
+}
+.tab-tint {
+  position: absolute;
+  inset: 0;
+}
+.tab-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.tab-grip {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 3px;
+  height: 26px;
+  margin-top: -13px;
+  border-radius: 3px;
+  background: var(--text);
+  opacity: 0.2;
+  transition: opacity 0.2s ease, height 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tab:hover .tab-grip {
+  opacity: 0.34;
+}
+
+/* Open: the tab has become the app card. */
+.tab.open {
+  cursor: default;
+}
+.tab.open .tab-veil {
+  opacity: 1;
+}
+.tab.open .tab-grip {
+  opacity: 0.26;
+}
+.tab.open:has(.grip-hit:hover) .tab-grip {
+  opacity: 0.45;
+}
+.tab.open:has(.grip-hit:active) .tab-grip {
+  opacity: 0.55;
+}
+
+/* ---- Dock --------------------------------------------------------------- */
+
+.dock {
+  position: absolute;
+  top: 0;
+}
+/* The grip's hit area: drawn by .tab-grip so it never moves as the tab unfolds. */
+.grip-hit {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 52px;
+  margin-top: -26px;
+  z-index: 2;
+  cursor: grab;
+}
+.grip-hit:active {
+  cursor: grabbing;
+}
+
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+.dock-column {
+  position: absolute;
+  top: 0;
+  right: 0;
+  overflow: hidden;
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  transition: --fade-top 0.28s ease, --fade-bottom 0.28s ease;
+}
+.dock-column.fade-top {
+  --fade-top: 26px;
+}
+.dock-column.fade-bottom {
+  --fade-bottom: 26px;
+}
+.dock-tiles {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Tiles ---------------------------------------------------------------- */
+
+.tile {
+  position: relative;
+  flex: none;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--tile-ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 58%),
+    var(--tile);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 0 0 1px rgba(20, 20, 40, 0.06),
+    0 1px 2px rgba(20, 20, 40, 0.1),
+    0 2px 6px rgba(20, 20, 40, 0.06);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+:root[data-theme="dark"] .tile {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.14),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+/* Hover is a soft halo in the app's color: no lift, no jitter. */
+.tile::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 18px;
+  border: 2px solid color-mix(in srgb, var(--tile) 70%, transparent);
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.tile:hover::before,
+.tile.active::before {
+  opacity: 1;
+  transform: scale(1);
+}
+.tile:hover {
+  filter: brightness(1.04) saturate(1.04);
+}
+.tile-face {
+  display: grid;
+  place-items: center;
+}
+.tile.has-image {
+  background: var(--surface-strong);
+}
+.app-image {
+  display: block;
+  object-fit: contain;
+  border-radius: 7px;
+}
+.tile-dot {
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--text);
+  opacity: 0.45;
+}
+:root[data-theme="dark"] .tile-dot {
+  background: var(--text);
+}
+.tile-spinner {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+}
+.tile-spinner rect {
+  fill: none;
+  stroke: var(--tile);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 22 78;
+}
+.tile-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  box-shadow: 0 0 0 3px var(--tile), 0 0 18px 2px var(--tile);
+  pointer-events: none;
+}
+.add-tile {
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1.5px dashed var(--border-strong);
+  box-shadow: none;
+  --tile: var(--text-3);
+}
+.add-tile:hover {
+  color: var(--text);
+  background: var(--surface-strong);
+  filter: none;
+}
+
+/* ---- Cards (settings card, preview card) ----------------------------------- */
+
+.card-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+.card-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+}
+.gear {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-2);
+}
+.gear-pill {
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.gear:hover .gear-pill {
+  background: var(--hover);
+  color: var(--text);
+}
+.gear:active .gear-pill {
+  background: var(--press);
+}
+.gear-icon {
+  display: grid;
+  place-items: center;
+}
+
+.preview-layer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+}
+.preview-layer iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+.fallback {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 14px;
+}
+.fallback-tile {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--tile-ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 58%),
+    var(--tile);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), inset 0 0 0 1px rgba(20, 20, 40, 0.06);
+}
+.fallback-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.fallback-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fallback-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.fallback-sub.error {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--danger);
+}
+.fallback-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #3fbf7f;
+}
+
+/* ---- Panel ------------------------------------------------------------- */
+
+.panel-host {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+.panel-root {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.panel {
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+  overflow: hidden;
+  transform-origin: 100% 40%;
+}
+/* Close grip: drawn exactly like .tab-grip (5px in, 3x26, vertically centered)
+   so the grip stays put as the panel unfolds. The button is a wider hit area. */
+.edge-handle {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 48px;
+  margin-top: -24px;
+  z-index: 41;
+  cursor: pointer;
+}
+.edge-handle::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 3px;
+  height: 26px;
+  margin-top: -13px;
+  border-radius: 3px;
+  background: var(--text);
+  opacity: 0.2;
+  transition: opacity 0.2s ease;
+}
+.edge-handle:hover::before {
+  opacity: 0.34;
+}
+.edge-handle:active::before {
+  opacity: 0.45;
+}
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 6px 22px;
+}
+.bar-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Buttons & controls ------------------------------------------------- */
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--text-2);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.icon-btn:hover,
+.icon-btn.active {
+  background: var(--hover);
+  color: var(--text);
+}
+.icon-btn:active {
+  background: var(--press);
+  transform: scale(0.94);
+}
+.icon-btn.small {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.icon-btn.danger:hover {
+  color: var(--danger);
+}
+.pin-icon {
+  display: grid;
+  place-items: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn-default {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.btn-ghost {
+  color: var(--text-2);
+}
+.btn-ghost:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.btn-primary {
+  background: var(--text);
+  color: var(--surface-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+:root[data-theme="dark"] .btn-primary {
+  color: #18181c;
+}
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+:root[data-theme="dark"] .btn-danger {
+  color: #1a1a1f;
+}
+
+.toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: 22px;
+  background: var(--border-strong);
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  transition: background 0.2s ease;
+}
+.toggle.on {
+  background: var(--accent);
+  justify-content: flex-end;
+}
+.toggle-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--hover);
+  gap: 2px;
+}
+.segmented button {
+  position: relative;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  transition: color 0.15s ease;
+}
+.segmented button span {
+  position: relative;
+}
+.segmented button.on {
+  color: var(--text);
+  font-weight: 500;
+}
+.segmented-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 0.5px var(--border);
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--hover);
+}
+.stepper button {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.stepper button:hover:not(:disabled) {
+  background: var(--surface-strong);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.stepper-value {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  min-width: 58px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+.stepper-unit {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---- Settings ---------------------------------------------------------- */
+
+.settings {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.settings-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 6px 30px 6px;
+  scrollbar-gutter: stable both-edges;
+}
+.set-section {
+  margin-bottom: 18px;
+}
+.set-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  margin: 0 0 4px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.01em;
+}
+.set-section-action {
+  margin-left: auto;
+  font-weight: 400;
+}
+.set-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 12px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 0;
+}
+.set-row + .set-row,
+.advanced .set-row,
+.disclosure-row {
+  border-top: 1px solid var(--border);
+}
+.set-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.set-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.set-hint.warn {
+  color: var(--danger);
+}
+.set-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.disclosure-row {
+  min-height: 38px;
+}
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 2px 0;
+}
+.disclosure:hover {
+  color: var(--text);
+}
+.disclosure svg {
+  transition: transform 0.2s ease;
+}
+.disclosure svg.open {
+  transform: rotate(90deg);
+}
+.advanced {
+  overflow: hidden;
+}
+
+.hotkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 120px;
+  height: 30px;
+  padding: 0 8px;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  font-size: 12px;
+  color: var(--text-2);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.hotkey.recording {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--accent);
+}
+kbd {
+  font-family: var(--font);
+  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: none;
+  opacity: 0.7;
+}
+.live-dot.online {
+  background: #3fbf7f;
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgba(63, 191, 127, 0.16);
+}
+.live-dot.idle {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.live-dot.error {
+  background: var(--danger);
+  opacity: 1;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Apps list */
+.app-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+}
+.app-row {
+  position: relative;
+  border-radius: 10px;
+  touch-action: none;
+}
+.app-row.dragging {
+  z-index: 5;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-lift);
+}
+.app-row-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 6px 8px 6px 0;
+}
+.app-grip {
+  width: 20px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s ease;
+}
+.app-row:hover .app-grip,
+.app-row.dragging .app-grip {
+  opacity: 0.8;
+}
+.app-tile {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--tile-ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 58%),
+    var(--tile);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(20, 20, 40, 0.06);
+}
+.app-tile.broken {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  box-shadow: none;
+}
+.app-row.hidden-app .app-tile,
+.app-row.hidden-app .app-name {
+  opacity: 0.55;
+}
+.app-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.app-name {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.app-sub .live-dot {
+  width: 6px;
+  height: 6px;
+}
+.app-tag {
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  background: var(--hover);
+}
+.app-controls,
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.inline-confirm .btn {
+  height: 28px;
+  padding: 0 10px;
+}
+.app-notes {
+  padding: 0 10px 10px 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.app-notes p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.app-error {
+  color: var(--danger);
+}
+.app-warning {
+  color: var(--warn);
+}
+.app-file {
+  font-family: var(--font-mono);
+  font-size: 11px !important;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+.apps-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 8px;
+  margin-left: -8px;
+  border-top: 1px solid var(--border);
+}
+.app-list:empty + .apps-actions {
+  border-top: 0;
+}
+.apps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 18px 16px 16px;
+}
+.apps-empty + .apps-actions {
+  justify-content: center;
+  margin-left: 0;
+}
+.apps-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin-bottom: 6px;
+}
+.apps-empty-title {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.apps-empty-text {
+  max-width: 280px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.about {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 6px 0 4px;
+}
+.about code {
+  font-size: 11px;
+}
+
+/* ---- Toasts ------------------------------------------------------------ */
+
+.toasts {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 24px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  padding: 9px 10px 9px 14px;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--surface-strong);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-pop);
+}
+:root[data-theme="dark"] .toast {
+  background: #f1f1f4;
+  color: #1a1a1f;
+}
+.toast button {
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 7px;
+  color: inherit;
+  background: rgba(127, 127, 127, 0.2);
+}
+.toast button:hover {
+  background: rgba(127, 127, 127, 0.32);
+}

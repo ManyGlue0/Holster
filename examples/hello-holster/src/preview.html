@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hello Holster</title>
+    <style>
+      /* Holster draws the card (material, border, radius, shadow). This page
+         draws only the content, on a transparent background. */
+      :root {
+        --text: #1a1a1f;
+        --text-2: #55555f;
+        --text-3: #8b8b95;
+        --hover: rgba(20, 20, 40, 0.05);
+        --border: rgba(20, 20, 40, 0.08);
+        --tint: #46b086;
+        color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        --text: #f2f2f5;
+        --text-2: #b4b4be;
+        --text-3: #85858f;
+        --hover: rgba(255, 255, 255, 0.06);
+        --border: rgba(255, 255, 255, 0.08);
+        --tint: #7ad6af;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        color: var(--text);
+        font: 13.5px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        cursor: default;
+      }
+      main {
+        padding: 16px 18px 14px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-3);
+        letter-spacing: 0.01em;
+      }
+      .live {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--tint);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--tint) 22%, transparent);
+        animation: breathe 2s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        50% {
+          box-shadow: 0 0 0 5px color-mix(in srgb, var(--tint) 8%, transparent);
+        }
+      }
+      .time {
+        margin-top: 2px;
+        font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+        font-size: 40px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .secs {
+        color: var(--text-3);
+        font-weight: 500;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 4px;
+        color: var(--text-2);
+      }
+      button {
+        font: inherit;
+        font-size: 12px;
+        color: var(--text-2);
+        background: none;
+        border: 0;
+        height: 26px;
+        padding: 0 9px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      button:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .zones {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 6px 0 0;
+        border-top: 1px solid var(--border);
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+      }
+      .open .zones {
+        max-height: 120px;
+        opacity: 1;
+      }
+      .zones li {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .zones span:first-child {
+        color: var(--text-2);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="card">
+      <div class="head"><span class="live"></span>Hello Holster</div>
+      <div class="time"><span id="hm">--:--</span><span class="secs" id="s">:--</span></div>
+      <div class="row">
+        <span id="date"></span>
+        <button id="toggle">World clocks</button>
+      </div>
+      <ul class="zones" id="zones"></ul>
+    </main>
+    <script>
+      // Follow Holster's theme: the query parameter first, then live messages.
+      const setTheme = (t) => (document.documentElement.dataset.theme = t === "dark" ? "dark" : "light");
+      setTheme(new URLSearchParams(location.search).get("theme"));
+      addEventListener("message", (e) => {
+        if (e.data && e.data.holster === "theme") setTheme(e.data.value);
+      });
+
+      const ZONES = [
+        ["London", "Europe/London"],
+        ["New York", "America/New_York"],
+        ["Tokyo", "Asia/Tokyo"],
+      ];
+      const fmt = (tz, opts) => new Intl.DateTimeFormat(undefined, { timeZone: tz, ...opts });
+      const hm = fmt(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+      const day = fmt(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+      function tick() {
+        const now = new Date();
+        document.getElementById("hm").textContent = hm.format(now);
+        document.getElementById("s").textContent = ":" + String(now.getSeconds()).padStart(2, "0");
+        document.getElementById("date").textContent = day.format(now);
+        document.getElementById("zones").innerHTML = ZONES.map(
+          ([name, tz]) => `<li><span>${name}</span><span>${fmt(tz, { hour: "2-digit", minute: "2-digit", hour12: false }).format(now)}</span></li>`,
+        ).join("");
+        setTimeout(tick, 1000 - (Date.now() % 1000));
+      }
+      tick();
+
+      // Asking Holster for a new size: it animates the card and keeps it on screen.
+      const card = document.getElementById("card");
+      document.getElementById("toggle").addEventListener("click", () => {
+        const open = card.classList.toggle("open");
+        document.getElementById("toggle").textContent = open ? "Less" : "World clocks";
+        parent.postMessage({ holster: "resize", width: 260, height: open ? 236 : 132 }, "*");
+      });
+    </script>
+  </body>
+</html>
