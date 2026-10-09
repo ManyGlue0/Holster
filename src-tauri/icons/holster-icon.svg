@@ -1,35 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="1024" height="1024">
-  <!-- Holster: the dock itself. A frosted card with its grip and three app
-       tiles in the shared pastel palette. Master artwork for every icon size;
-       regenerate with `pnpm app-icon`. -->
+  <!-- Holster: the edge tab and its column of app tiles, with the mint tile
+       halfway out of its slot, being drawn. Centered on its full outline
+       (tab stroke included). Master artwork for every icon size; regenerate
+       with `pnpm app-icon`. -->
   <defs>
-    <linearGradient id="card" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#F7F5FD"/>
-      <stop offset="1" stop-color="#E6E9F6"/>
+    <linearGradient id="tab" gradientUnits="userSpaceOnUse" x1="40" y1="30" x2="216" y2="226">
+      <stop offset="0" stop-color="#B7A6F2"/>
+      <stop offset="1" stop-color="#6FA6F0"/>
     </linearGradient>
-    <linearGradient id="t1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#C6B9F7"/>
+    <linearGradient id="lavender" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#C9BCF7"/>
       <stop offset="1" stop-color="#9C89E8"/>
     </linearGradient>
-    <linearGradient id="t2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#A6CDF6"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#A9CEF6"/>
       <stop offset="1" stop-color="#6FA6E8"/>
     </linearGradient>
-    <linearGradient id="t3" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#9FE3C6"/>
-      <stop offset="1" stop-color="#55C496"/>
+    <linearGradient id="mint" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#86E0BB"/>
+      <stop offset="1" stop-color="#43BE8E"/>
     </linearGradient>
-    <filter id="s" x="-30%" y="-20%" width="160%" height="140%">
-      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#2F2A55" flood-opacity="0.22"/>
-    </filter>
   </defs>
-  <rect x="58" y="10" width="140" height="236" rx="42" fill="url(#card)" filter="url(#s)"/>
-  <rect x="58.75" y="10.75" width="138.5" height="234.5" rx="41.25" fill="none" stroke="#8C86B8" stroke-opacity="0.18" stroke-width="1.5"/>
-  <rect x="75" y="104" width="9" height="48" rx="4.5" fill="#6E6797" fill-opacity="0.42"/>
-  <rect x="100" y="28" width="66" height="62" rx="19" fill="url(#t1)"/>
-  <rect x="100" y="97" width="66" height="62" rx="19" fill="url(#t2)"/>
-  <rect x="100" y="166" width="66" height="62" rx="19" fill="url(#t3)"/>
-  <rect x="100" y="28" width="66" height="30" rx="15" fill="#FFFFFF" fill-opacity="0.16"/>
-  <rect x="100" y="97" width="66" height="30" rx="15" fill="#FFFFFF" fill-opacity="0.16"/>
-  <rect x="100" y="166" width="66" height="30" rx="15" fill="#FFFFFF" fill-opacity="0.16"/>
+  <path d="M193 46 V210" stroke="url(#tab)" stroke-width="26" stroke-linecap="round"/>
+  <rect x="102" y="30" width="64" height="60" rx="19" fill="url(#lavender)"/>
+  <rect x="102" y="166" width="64" height="60" rx="19" fill="url(#sky)"/>
+  <rect x="102" y="98" width="64" height="60" rx="19" fill="#9FB2F0" fill-opacity=".2"/>
+  <rect x="50" y="98" width="64" height="60" rx="19" fill="url(#mint)"/>
+  <rect x="50" y="98" width="64" height="28" rx="14" fill="#FFFFFF" fill-opacity=".2"/>
 </svg>
