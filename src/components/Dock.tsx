@@ -157,11 +157,13 @@ function Tile({
             className="tile-spinner"
             viewBox="0 0 54 54"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1, rotate: 360 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ rotate: { duration: 1.1, ease: "linear", repeat: Infinity }, opacity: { duration: 0.2 } }}
+            transition={{ duration: 0.2 }}
           >
-            <rect x="2" y="2" width="50" height="50" rx="16" pathLength="100" />
+            {/* The outline stays put, on the hover ring's line; only the arc
+                travels along it, so it follows the tile's shape. */}
+            <rect x="1" y="1" width="52" height="52" rx="17" pathLength="100" />
           </motion.svg>
         )}
       </AnimatePresence>
