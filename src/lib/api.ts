@@ -26,7 +26,7 @@ export interface ShellState {
   panelWidth: number;
   panelHeight: number;
   overhang: number;
-  fullscreen: boolean;
+  tucked: boolean;
 }
 
 export interface Rect {

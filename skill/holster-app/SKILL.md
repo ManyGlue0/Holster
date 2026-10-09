@@ -158,6 +158,7 @@ Template:
 - Holster `POST`s `open.url` with JSON `{ "edge": "right", "anchorY": 433 }`. `anchorY` is the vertical center of the clicked tile in **physical screen pixels**. Use it if your panel opens from a point; full-height panels can ignore it.
 - Answer `2xx` immediately (Holster waits at most 4 s), then open the panel on your UI thread.
 - Holster calls `AllowSetForegroundWindow(ASFW_ANY)` right before the request, so you may take the foreground. Still take focus the robust way (attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`), as Anotes does.
+- While your panel is out, Holster's tab steps aside: the dock folds straight into the edge and the tab stays tucked until the panel is gone, then slides back. Holster recognizes the panel as a visible window of the process serving `open.url` (or of `launch.exe`) whose right side is within 40 px of the screen edge, wider than 160 px, overlapping the work area. Park or hide the panel when it closes; a slim tab of your own on the edge doesn't count. If no such window shows up within 3 s, the tab comes back.
 - Not running: Holster runs `launch.exe`, waits up to 20 s for `health`, then calls `open.url`. Make `health` answer as soon as the open route works.
 - Failures show on a small card next to the tile ("didn't respond to open", "couldn't open its panel (500)"). It's the only card Holster draws on its own.
 

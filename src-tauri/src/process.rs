@@ -89,6 +89,29 @@ pub fn main_window(pids: &[u32]) -> Option<isize> {
     (s.found != 0).then_some(s.found)
 }
 
+/// The process listening on a local TCP port (IPv4), e.g. the app behind an
+/// `open.url`.
+pub fn listener_pid(port: u16) -> Option<u32> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{GetExtendedTcpTable, TCP_TABLE_OWNER_PID_LISTENER};
+    const AF_INET: u32 = 2;
+    unsafe {
+        let mut size = 0u32;
+        GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
+        // Rows are six u32s (state, local addr, local port, remote addr,
+        // remote port, pid) after a u32 count. Room for a few new listeners.
+        let mut buf = vec![0u32; size as usize / 4 + 64];
+        size = (buf.len() * 4) as u32;
+        if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0 {
+            return None;
+        }
+        let n = (buf[0] as usize).min((buf.len() - 1) / 6);
+        buf[1..1 + n * 6]
+            .chunks_exact(6)
+            .find(|row| u16::from_be(row[2] as u16) == port)
+            .map(|row| row[5])
+    }
+}
+
 /// Restores and brings a window to the foreground. Attaching to the current
 /// foreground thread's input lets Windows accept the switch.
 pub fn focus(hwnd: isize) {

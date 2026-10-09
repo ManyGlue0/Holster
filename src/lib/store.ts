@@ -46,7 +46,7 @@ export const useStore = create<Store>((set, get) => ({
     panelWidth: 420,
     panelHeight: 800,
     overhang: 0,
-    fullscreen: false,
+    tucked: false,
   },
   surface: "edge",
   preview: { appId: null, width: 0, height: 0, fallback: false, error: null, shown: false, rel: null },

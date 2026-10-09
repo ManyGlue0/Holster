@@ -7,7 +7,8 @@ import { Dock } from "./Dock";
 
 const DRAG_THRESHOLD = 4;
 
-// Ambient tint that arrived during a fullscreen app; shown once it's gone.
+// Ambient tint that arrived while the tab was tucked away (a fullscreen app, or
+// an app panel on the edge); shown once the tab is back.
 let queuedTint: string | null = null;
 
 /** The edge of the screen: the frosted tab, and after a short hover, the
@@ -15,7 +16,7 @@ let queuedTint: string | null = null;
  *  grip, the ambient tint and the dock's content. */
 export function Edge() {
   const mode = useStore((s) => s.shell.mode);
-  const fullscreen = useStore((s) => s.shell.fullscreen);
+  const tucked = useStore((s) => s.shell.tucked);
   const dockDelay = useStore((s) => s.settings?.delays.dock ?? 120);
   const tint = useAnimationControls();
   const gesture = useRef<{ y: number; dragging: boolean; frame: number } | null>(null);
@@ -28,8 +29,8 @@ export function Edge() {
   };
   useEffect(() => clearIntent, []);
   useEffect(() => {
-    if (fullscreen || mode !== "closed") clearIntent();
-  }, [fullscreen, mode]);
+    if (tucked || mode !== "closed") clearIntent();
+  }, [tucked, mode]);
 
   const playTint = useCallback(
     (color: string) => {
@@ -48,7 +49,7 @@ export function Edge() {
         const st = useStore.getState().shell;
         // An open dock pulses the app's tile instead (see Dock).
         if (st.mode !== "closed" && st.mode !== "closing") return;
-        if (st.fullscreen) queuedTint = e.color;
+        if (st.tucked) queuedTint = e.color;
         else playTint(e.color);
       }),
     [playTint],
@@ -56,18 +57,18 @@ export function Edge() {
 
   // Leaving the game: once the tab has slid back out, show what was missed.
   useEffect(() => {
-    if (fullscreen || !queuedTint) return;
+    if (tucked || !queuedTint) return;
     const color = queuedTint;
     const t = window.setTimeout(() => {
       queuedTint = null;
       playTint(color);
     }, 450);
     return () => window.clearTimeout(t);
-  }, [fullscreen, playTint]);
+  }, [tucked, playTint]);
 
   // ---- tab: hover opens the dock, vertical drag moves it, click opens at once ----
   const onEnter = () => {
-    if (mode !== "closed" || fullscreen) return;
+    if (mode !== "closed" || tucked) return;
     api.hover(true);
     clearIntent();
     intent.current = window.setTimeout(() => {
@@ -80,7 +81,7 @@ export function Edge() {
     if (mode === "closed" && !gesture.current) api.hover(false);
   };
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || mode !== "closed" || fullscreen) return;
+    if (e.button !== 0 || mode !== "closed" || tucked) return;
     clearIntent();
     (e.target as Element).setPointerCapture(e.pointerId);
     gesture.current = { y: e.screenY, dragging: false, frame: 0 };
@@ -108,7 +109,7 @@ export function Edge() {
 
   return (
     <div
-      className={`tab ${open ? "open" : ""} ${fullscreen && mode === "closed" ? "tucked" : ""}`}
+      className={`tab ${open ? "open" : ""} ${tucked && mode === "closed" ? "tucked" : ""}`}
       onPointerEnter={onEnter}
       onPointerLeave={onLeave}
       onPointerDown={onPointerDown}

@@ -100,14 +100,20 @@ pub async fn open_app(core: C<'_>, id: String, anchor_y: f64) -> Res<()> {
     let shell = core.shell().clone();
     let result = open_app_inner(&core, &id, shell.screen_y(anchor_y)).await;
     match &result {
-        Ok(()) => shell.close(),
+        Ok(Some(pids)) => {
+            shell.cover_with(pids.clone());
+            shell.close();
+        }
+        Ok(None) => shell.close(),
         Err(e) => shell.show_error(&id, anchor_y, e.clone()),
     }
     core.health.poke();
-    result
+    result.map(|_| ())
 }
 
-async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<()> {
+/// Opens the app. For a panel app, returns its processes so the tab can step
+/// aside while the panel is out.
+async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<Option<Vec<u32>>> {
     let m = core.reg.manifest(id).ok_or("This app's manifest has an error. See Settings, Apps.")?;
     match m.mode {
         OpenMode::Window => {
@@ -120,7 +126,7 @@ async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<()> 
                 Some(hwnd) => process::focus(hwnd),
                 None => process::launch(&launch.exe, &launch.args)?,
             }
-            Ok(())
+            Ok(None)
         }
         OpenMode::Panel => {
             if core.health.check(&m).await != Status::Running {
@@ -155,7 +161,18 @@ async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<()> 
             if !resp.status().is_success() {
                 return Err(format!("{} couldn't open its panel ({})", m.name, resp.status().as_u16()));
             }
-            Ok(())
+            let port = reqwest::Url::parse(&url).ok().and_then(|u| u.port_or_known_default());
+            let exe = m.launch.as_ref().map(|l| l.exe.clone());
+            let pids = tokio::task::spawn_blocking(move || {
+                let mut pids: Vec<u32> = port.and_then(process::listener_pid).into_iter().collect();
+                if let Some(exe) = exe {
+                    pids.extend(process::pids_for(&exe).into_iter().filter(|p| !pids.contains(p)).collect::<Vec<_>>());
+                }
+                pids
+            })
+            .await
+            .unwrap_or_default();
+            Ok(Some(pids))
         }
     }
 }

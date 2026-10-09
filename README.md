@@ -13,6 +13,7 @@ It's made by the same hands as Anotes: same stack, same tokens, same materials, 
 - **Move it**: drag the tab, or the dock's grip, up or down.
 - **Settings**: the gear card below the dock, or the tray icon. The back arrow returns to the dock. Reorder apps by dragging, hide them from the dock, remove a manifest, or add one. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, and hover timing (under "Hover timing").
 - **Game mode**: while a fullscreen app is in front, the tab tucks away and never takes focus. Activity glows wait until you're back.
+- **Panels take the edge**: when an app opens its own side panel, the dock folds into the edge and the tab stays tucked away until that panel closes, the same way the settings panel takes the tab's place.
 - **Ambient signal**: when an app reports activity, the tab glows in that app's color (or its tile pulses while the dock is open).
 
 ## Adding apps

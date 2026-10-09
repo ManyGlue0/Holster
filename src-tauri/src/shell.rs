@@ -17,7 +17,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
-use windows_sys::Win32::Graphics::Dwm::{DwmFlush, DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND};
+use windows_sys::Win32::Graphics::Dwm::{
+    DwmFlush, DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAKED, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+};
 use windows_sys::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW};
 use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
@@ -385,8 +387,9 @@ pub struct ShellState {
     /// How far the edge shapes extend past the screen edge (CSS px), so
     /// content can keep clear of the hidden strip.
     pub overhang: f64,
-    /// Game mode: a fullscreen app is in front.
-    pub fullscreen: bool,
+    /// The tab is tucked into the edge: a fullscreen app is in front, or an
+    /// app's panel is out on Holster's edge.
+    pub tucked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -428,6 +431,21 @@ struct Shown {
     error: Option<String>,
 }
 
+/// An app panel Holster opened on its edge. The tab stays tucked away while
+/// it's out, the way Holster's own settings panel takes the tab's place.
+struct Cover {
+    /// The app's processes (whoever serves its open URL, plus its launch exe).
+    pids: Vec<u32>,
+    since: Instant,
+    /// The panel has been seen on the edge at least once.
+    seen: bool,
+    /// Consecutive checks without it, once seen.
+    misses: u8,
+}
+
+/// How long an app gets to put its panel on the edge before the tab returns.
+const COVER_APPEAR: Duration = Duration::from_millis(3000);
+
 struct State {
     mode: Mode,
     hover: bool,
@@ -437,6 +455,9 @@ struct State {
     opened_at: Instant,
     blur_suppressed: bool,
     fullscreen: bool,
+    covers: Vec<Cover>,
+    /// A thread is following `covers`.
+    cover_watch: bool,
     rows: usize,
     preview: Option<Shown>,
     preview_shown: bool,
@@ -447,6 +468,12 @@ struct State {
     preview_failed: std::collections::HashSet<String>,
     /// Bumped on every preview change so delayed hides can tell they're stale.
     preview_gen: u64,
+}
+
+impl State {
+    fn tucked(&self) -> bool {
+        self.fullscreen || !self.covers.is_empty()
+    }
 }
 
 struct Win {
@@ -514,6 +541,50 @@ fn park(win: &Win) {
     win.anim.jump(Rect { l: -32000.0, t: -32000.0, r: -32000.0 + w, b: -32000.0 + h });
 }
 
+/// Whether one of `pids` has a panel out on Holster's edge: a visible window
+/// (not minimized or cloaked) wider than a tab, its right side at the edge
+/// (panels keep a small gap), overlapping the work area. A tab of its own on
+/// the edge is too narrow to count.
+unsafe fn panel_on_edge(pids: &[u32], g: &Geometry) -> bool {
+    struct Search<'a> {
+        pids: &'a [u32],
+        g: &'a Geometry,
+        found: bool,
+    }
+    unsafe extern "system" fn cb(hwnd: HWND, data: LPARAM) -> i32 {
+        let s = &mut *(data as *mut Search);
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if !s.pids.contains(&pid) || IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
+            return 1;
+        }
+        let mut cloaked = 0u32;
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED as u32, &mut cloaked as *mut u32 as *mut _, 4);
+        if cloaked != 0 {
+            return 1;
+        }
+        let mut r: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut r) == 0 {
+            return 1;
+        }
+        let (g, reach) = (s.g, 40.0 * s.g.scale);
+        let (l, t, rr, b) = (r.left as f64, r.top as f64, r.right as f64, r.bottom as f64);
+        let hit = rr - l >= 160.0 * g.scale
+            && rr >= g.work.r - reach
+            && rr <= g.monitor.r + reach
+            && t < g.work.b
+            && b > g.work.t;
+        if hit {
+            s.found = true;
+            return 0;
+        }
+        1
+    }
+    let mut s = Search { pids, g, found: false };
+    EnumWindows(Some(cb), &mut s as *mut _ as LPARAM);
+    s.found
+}
+
 fn visible(hwnd: isize) -> bool {
     unsafe { IsWindowVisible(hwnd as HWND) != 0 }
 }
@@ -544,6 +615,8 @@ impl Shell {
                 opened_at: Instant::now(),
                 blur_suppressed: false,
                 fullscreen: false,
+                covers: Vec::new(),
+                cover_watch: false,
                 rows: 1,
                 preview: None,
                 preview_shown: false,
@@ -667,7 +740,7 @@ impl Shell {
             panel_width: g.panel.w() / g.scale,
             panel_height: g.panel.h() / g.scale,
             overhang: g.overhang,
-            fullscreen: st.fullscreen,
+            tucked: st.tucked(),
         }
     }
 
@@ -769,7 +842,7 @@ impl Shell {
             }
             let g = me.geometry();
             me.retract_gear(&g);
-            let tucked = me.state.lock().unwrap().fullscreen;
+            let tucked = me.is_tucked();
             let me2 = me.clone();
             me.main.anim.animate(
                 if tucked { g.tab_tucked } else { g.tab },
@@ -779,7 +852,7 @@ impl Shell {
                     let mut st = me2.state.lock().unwrap();
                     if st.mode == Mode::Closing {
                         st.mode = Mode::Closed;
-                        let hide_it = st.fullscreen;
+                        let hide_it = st.tucked();
                         drop(st);
                         if hide_it {
                             hide(me2.main.hwnd);
@@ -862,7 +935,7 @@ impl Shell {
 
     pub fn hover(&self, on: bool) {
         let mut st = self.state.lock().unwrap();
-        if st.mode != Mode::Closed || st.hover == on || st.drag.is_some() || (on && st.fullscreen) {
+        if st.mode != Mode::Closed || st.hover == on || st.drag.is_some() || (on && st.tucked()) {
             return;
         }
         st.hover = on;
@@ -931,7 +1004,7 @@ impl Shell {
     /// Re-applies geometry after display, DPI, work-area or app-count changes.
     pub fn relayout(self: &Arc<Self>) {
         let st = self.state.lock().unwrap();
-        let (mode, hover, tucked) = (st.mode, st.hover, st.fullscreen);
+        let (mode, hover, tucked) = (st.mode, st.hover, st.tucked());
         drop(st);
         let g = self.geometry();
         self.state.lock().unwrap().rows = g.rows;
@@ -1218,41 +1291,49 @@ impl Shell {
         (self.main.anim.target().t + client_y * g.scale).round()
     }
 
-    // ---- game mode --------------------------------------------------------------------
+    // ---- tucking (game mode, app panels) ---------------------------------------------------
 
     pub fn monitor_bounds(&self) -> Rect {
         self.geometry().monitor
     }
 
-    pub fn is_fullscreen(&self) -> bool {
-        self.state.lock().unwrap().fullscreen
+    pub fn is_tucked(&self) -> bool {
+        self.state.lock().unwrap().tucked()
     }
 
-    /// Game mode. On: the tab fades and retracts into the edge, then hides so
-    /// it can't catch clicks at the edge of the game. Off: it slides back out.
-    /// An open dock or panel is left alone and tucks away when it closes.
+    /// Game mode: a fullscreen app is in front.
     pub fn set_fullscreen(self: &Arc<Self>, on: bool) {
-        let mode = {
+        self.update_tuck(|st| st.fullscreen = on);
+    }
+
+    /// The tab steps aside while something else owns the edge: it fades and
+    /// retracts into the edge, then hides so it can't catch clicks there. Once
+    /// nothing does, it slides back out. An open dock or panel is left alone
+    /// and tucks away when it closes.
+    fn update_tuck(self: &Arc<Self>, change: impl FnOnce(&mut State)) {
+        let (mode, before, after) = {
             let mut st = self.state.lock().unwrap();
-            if st.fullscreen == on {
-                return;
-            }
-            st.fullscreen = on;
-            if on {
+            let before = st.tucked();
+            change(&mut st);
+            let after = st.tucked();
+            if after {
                 st.hover = false;
             }
-            st.mode
+            (st.mode, before, after)
         };
+        if before == after {
+            return;
+        }
         self.emit_state();
         if mode != Mode::Closed {
             return;
         }
         let g = self.geometry();
-        if on {
+        if after {
             let me = self.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(140));
-                if !me.is_fullscreen() || me.mode() != Mode::Closed {
+                if !me.is_tucked() || me.mode() != Mode::Closed {
                     return;
                 }
                 let me2 = me.clone();
@@ -1261,7 +1342,7 @@ impl Shell {
                     UNDOCK_SPRING,
                     None,
                     Some(Box::new(move || {
-                        if me2.is_fullscreen() && me2.mode() == Mode::Closed {
+                        if me2.is_tucked() && me2.mode() == Mode::Closed {
                             hide(me2.main.hwnd);
                         }
                     })),
@@ -1273,6 +1354,65 @@ impl Shell {
             }
             show(self.main.hwnd);
             self.main.anim.animate(g.tab, HOVER_SPRING, None, None);
+        }
+    }
+
+    /// An app is opening its panel on Holster's edge. Call before `close()`,
+    /// so the dock folds straight into the edge instead of back into the tab.
+    /// If the panel doesn't show up on the edge within a few seconds (the app
+    /// put it somewhere else), the tab comes back.
+    pub fn cover_with(self: &Arc<Self>, pids: Vec<u32>) {
+        if pids.is_empty() {
+            return;
+        }
+        let mut spawn = false;
+        self.update_tuck(|st| {
+            st.covers.retain(|c| !c.pids.iter().any(|p| pids.contains(p)));
+            st.covers.push(Cover { pids, since: Instant::now(), seen: false, misses: 0 });
+            spawn = !std::mem::replace(&mut st.cover_watch, true);
+        });
+        if spawn {
+            let me = self.clone();
+            std::thread::Builder::new()
+                .name("holster-cover".into())
+                .spawn(move || me.watch_covers())
+                .expect("cover watcher");
+        }
+    }
+
+    /// Follows the panels covering the edge ten times a second, only while
+    /// there are any. Each check is one EnumWindows pass.
+    fn watch_covers(self: Arc<Self>) {
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+            let pids: Vec<Vec<u32>> = self.state.lock().unwrap().covers.iter().map(|c| c.pids.clone()).collect();
+            let g = self.geometry();
+            let out: Vec<(Vec<u32>, bool)> = pids.into_iter().map(|p| {
+                let on = unsafe { panel_on_edge(&p, &g) };
+                (p, on)
+            }).collect();
+            let mut done = false;
+            self.update_tuck(|st| {
+                for c in st.covers.iter_mut() {
+                    let Some((_, on)) = out.iter().find(|(p, _)| *p == c.pids) else { continue };
+                    if *on {
+                        c.seen = true;
+                        c.misses = 0;
+                    } else if c.seen {
+                        c.misses = c.misses.saturating_add(1);
+                    }
+                }
+                // Two misses in a row: the panel is gone (closing animations
+                // already left the edge by then).
+                st.covers.retain(|c| if c.seen { c.misses < 2 } else { c.since.elapsed() < COVER_APPEAR });
+                if st.covers.is_empty() {
+                    st.cover_watch = false;
+                    done = true;
+                }
+            });
+            if done {
+                return;
+            }
         }
     }
 
