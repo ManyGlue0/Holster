@@ -1,4 +1,4 @@
-// Motion presets, shared with Anotes. Every interaction animates with these.
+// Motion presets. Every interaction animates with these.
 
 /** Controls: toggles, segmented pills, popovers, pins. */
 export const spring = { type: "spring", stiffness: 520, damping: 38, mass: 0.8 } as const;

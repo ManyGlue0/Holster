@@ -2,6 +2,7 @@
 name = "hello-holster"
 version = "0.1.0"
 description = "The smallest Holster app: a live clock preview and a window."
+license = "MIT"
 edition = "2021"
 
 [dependencies]

@@ -6,7 +6,7 @@ import { SettingsPage } from "./Settings";
 
 /** The settings panel. Content is laid out at the panel's final size and
  *  anchored to the top-right, so while the window morphs it is revealed, not
- *  reflowed (the Anotes panel technique). */
+ *  reflowed. */
 export function Panel() {
   const shell = useStore((s) => s.shell);
   const leaving = useStore((s) => s.panelLeaving);

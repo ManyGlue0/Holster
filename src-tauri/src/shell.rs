@@ -1,5 +1,5 @@
 //! The window shell. Holster draws with three frameless, always-on-top
-//! windows whose *bounds* are the visible shapes, the way Anotes does:
+//! windows whose *bounds* are the visible shapes:
 //!
 //! - `main`: the tab on the screen edge; open, the app card (the dock); and
 //!   for Settings, the full-height panel.
@@ -318,7 +318,7 @@ impl Animator {
     }
 }
 
-// Same character as Anotes: out from the edge first (slight overshoot), then height.
+// Out from the edge first (slight overshoot), then height.
 const DOCK_SPRING: Spring = Spring {
     omega: [22.0, 19.0, 22.0, 19.0],
     zeta: [0.8, 0.86, 0.9, 0.86],

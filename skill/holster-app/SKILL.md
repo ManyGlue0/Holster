@@ -1,13 +1,13 @@
 ---
 name: holster-app
-description: Use when making a new app, or adapting an existing one, so it shows up in the Holster dock (manifest, preview page, open route, activity signals) and looks and feels like it belongs next to Anotes and Holster.
+description: Use when making a new app, or adapting an existing one, so it shows up in the Holster dock (manifest, preview page, open route, activity signals) and looks and feels like it belongs in Holster.
 ---
 
 # Building a Holster app
 
 Holster is a Windows 11 dock that lives on the right screen edge as a slim frosted tab. Hovering it opens a column of app tiles; hovering a tile shows that app's **preview** to the left of the dock; clicking a tile **opens** the app. Holster is only the frame. Each app decides its icon, its color, its preview and how it opens, through one small manifest.
 
-This file is everything you need: the contract, the required stack, the design language with real values, and the taste rules. Anotes (the reference app) and Holster itself follow all of it.
+This file is everything you need: the contract, the required stack, the design language with real values, and the taste rules. Holster itself and its example app (`examples/hello-holster`) follow all of it.
 
 ## Checklist
 
@@ -47,14 +47,14 @@ One manifest per app at `%APPDATA%\Holster\apps\<id>.json`. The file name **must
 ```json
 {
   "schema": 1,
-  "id": "anotes",
-  "name": "Anotes",
+  "id": "notes",
+  "name": "Notes",
   "icon": { "lucide": "notebook-pen" },
   "color": "#B8A9F0",
   "health": "http://127.0.0.1:47321/holster/health",
-  "preview": { "path": "C:\\Path\\To\\Anotes\\holster-preview\\index.html", "width": 320, "height": 260 },
+  "preview": { "path": "C:\\Path\\To\\Notes\\holster-preview\\index.html", "width": 320, "height": 260 },
   "open": { "mode": "panel", "url": "http://127.0.0.1:47321/holster/open" },
-  "launch": { "exe": "C:\\Path\\To\\Anotes.exe", "args": [] }
+  "launch": { "exe": "C:\\Path\\To\\Notes.exe", "args": [] }
 }
 ```
 
@@ -157,7 +157,7 @@ Template:
 
 - Holster `POST`s `open.url` with JSON `{ "edge": "right", "anchorY": 433 }`. `anchorY` is the vertical center of the clicked tile in **physical screen pixels**. Use it if your panel opens from a point; full-height panels can ignore it.
 - Answer `2xx` immediately (Holster waits at most 4 s), then open the panel on your UI thread.
-- Holster calls `AllowSetForegroundWindow(ASFW_ANY)` right before the request, so you may take the foreground. Still take focus the robust way (attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`), as Anotes does.
+- Holster calls `AllowSetForegroundWindow(ASFW_ANY)` right before the request, so you may take the foreground. Still take focus the robust way (attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`), as Holster does for window apps.
 - While your panel is out, Holster's tab steps aside: the dock folds straight into the edge and the tab stays tucked until the panel is gone, then slides back. Holster recognizes the panel as a visible window of the process serving `open.url` (or of `launch.exe`) whose right side is within 40 px of the screen edge, wider than 160 px, overlapping the work area. Park or hide the panel when it closes; a slim tab of your own on the edge doesn't count. If no such window shows up within 3 s, the tab comes back.
 - Not running: Holster runs `launch.exe`, waits up to 20 s for `health`, then calls `open.url`. Make `health` answer as soon as the open route works.
 - Failures show on a small card next to the tile ("didn't respond to open", "couldn't open its panel (500)"). It's the only card Holster draws on its own.
@@ -184,7 +184,7 @@ Holster's API rejects requests whose `Host` isn't `127.0.0.1:<port>` or `localho
 ### 1.8 Security
 
 - Everything Holster talks to is `127.0.0.1`. Serve Holster routes on a listener bound to `127.0.0.1` only.
-- **Holster routes must never be reachable through a public tunnel.** If your app also exposes itself (Tailscale Funnel, Cloudflare, ngrok), give the tunnel its own listener (or a gate that 404s everything else) and never route `/holster/*` there. Anotes' pattern: the local listener serves everything; requests forwarded from the internet carry a marker header or arrive on a dedicated port, and get only the public routes.
+- **Holster routes must never be reachable through a public tunnel.** If your app also exposes itself (Tailscale Funnel, Cloudflare, ngrok), give the tunnel its own listener (or a gate that 404s everything else) and never route `/holster/*` there. A good pattern: the local listener serves everything; requests forwarded from the internet carry a marker header or arrive on a dedicated port, and get only the public routes.
 - Validate the `Host` header on loopback listeners (DNS-rebinding guard).
 
 ### 1.9 Minimal server (Rust, axum)
@@ -264,7 +264,7 @@ fn write_manifest(port: u16) -> anyhow::Result<()> {
 
 ## 3. The design language
 
-Real values from Anotes and Holster. Copy them; don't approximate them.
+Real values from Holster. Copy them; don't approximate them.
 
 ### 3.1 Tokens
 
@@ -418,7 +418,7 @@ Three options everywhere: **System, Light, Dark** (segmented control). Resolve t
 
 - One glanceable thing: the next step, a live number, the latest few items. It answers "what's going on in this app?" in under a second.
 - Start with a 12px/600 `--text-3` label (your app or the subject), optionally with a 6px status dot in your color.
-- Up to three rows. Neutral surfaces (`--surface` + `--border`, radius 12) for rows, color only for meaning (progress, status). Anotes' peek is the model: a Lucide icon inside a circular progress ring in the project's color, a 13px/600 title and an 11.5px `--text-3` description, all truncated with ellipsis.
+- Up to three rows. Neutral surfaces (`--surface` + `--border`, radius 12) for rows, color only for meaning (progress, status). A good model: a Lucide icon inside a circular progress ring in the item's color, a 13px/600 title and an 11.5px `--text-3` description, all truncated with ellipsis.
 - No scrollbars, no empty space: size the card to the content and `resize` when the content changes.
 - Designed states: empty ("Nothing in progress", with a quiet icon), loading (render the last known state, never a spinner on hover), error (one calm line in `--text-3`).
 

@@ -629,7 +629,7 @@ mod tests {
     use super::*;
 
     const GOOD: &str = r##"{
-      "schema": 1, "id": "anotes", "name": "Anotes",
+      "schema": 1, "id": "notes", "name": "Notes",
       "icon": { "lucide": "notebook-pen" }, "color": "#B8A9F0",
       "health": "http://127.0.0.1:47321/holster/health",
       "preview": { "url": "http://127.0.0.1:47321/holster/preview", "width": 320, "height": 260 },
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn parses_the_spec_example() {
-        let (m, w) = parse(GOOD, "anotes");
+        let (m, w) = parse(GOOD, "notes");
         let m = m.unwrap();
         assert_eq!(m.mode, OpenMode::Panel);
         assert_eq!(m.preview.unwrap().width, 320.0);
@@ -658,12 +658,12 @@ mod tests {
     #[test]
     fn previews_need_a_page() {
         let none = GOOD.replace(r#""url": "http://127.0.0.1:47321/holster/preview", "#, "");
-        assert!(parse(&none, "anotes").0.unwrap_err().contains("preview needs"));
+        assert!(parse(&none, "notes").0.unwrap_err().contains("preview needs"));
         let missing = GOOD.replace(
             r#""url": "http://127.0.0.1:47321/holster/preview""#,
             r#""path": "C:\\nope\\preview.html""#,
         );
-        let (m, w) = parse(&missing, "anotes");
+        let (m, w) = parse(&missing, "notes");
         assert!(m.unwrap().preview.is_none());
         assert_eq!(w.len(), 1);
     }
@@ -672,9 +672,9 @@ mod tests {
     fn rejects_non_loopback_and_mismatched_ids() {
         assert!(parse(GOOD, "other").0.unwrap_err().contains("file name"));
         let bad = GOOD.replace("http://127.0.0.1:47321/holster/open", "http://example.com/open");
-        assert!(parse(&bad, "anotes").0.unwrap_err().contains("open.url"));
+        assert!(parse(&bad, "notes").0.unwrap_err().contains("open.url"));
         let bad = GOOD.replace("notebook-pen", "not-an-icon");
-        assert!(parse(&bad, "anotes").0.is_err());
+        assert!(parse(&bad, "notes").0.is_err());
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn clamps_preview_size_with_a_warning() {
         let big = GOOD.replace("\"width\": 320", "\"width\": 5000");
-        let (m, w) = parse(&big, "anotes");
+        let (m, w) = parse(&big, "notes");
         assert_eq!(m.unwrap().preview.unwrap().width, PREVIEW_MAX.0);
         assert_eq!(w.len(), 1);
     }

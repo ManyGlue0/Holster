@@ -1,4 +1,4 @@
-// The shared pastel palette (identical to Anotes), and how an app's manifest
+// The pastel palette, and how an app's manifest
 // color becomes a tile.
 
 export interface Swatch {

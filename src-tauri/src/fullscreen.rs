@@ -1,6 +1,6 @@
 //! Game mode: notices when a fullscreen app (exclusive D3D, presentation mode,
 //! or a borderless window covering the monitor) is in front on Holster's
-//! monitor, and tells the shell to tuck the tab away. (Same logic as Anotes.)
+//! monitor, and tells the shell to tuck the tab away.
 //!
 //! A dedicated thread reacts to foreground changes through a WinEvent hook and
 //! re-checks once a second, so a window going fullscreen in place (F11, a game

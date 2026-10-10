@@ -2,6 +2,8 @@
 name = "holster"
 version = "0.1.0"
 description = "Holster: a dock on the edge of your screen for your own apps."
+license = "MIT"
+repository = "https://github.com/ManyGlue0/Holster"
 edition = "2021"
 
 [lib]
