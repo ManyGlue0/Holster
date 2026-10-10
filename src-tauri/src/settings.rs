@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_HOTKEY: &str = "Ctrl+Alt+Space";
+pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+H";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]

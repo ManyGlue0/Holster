@@ -33,7 +33,7 @@ Holster is **only the frame**. Every app in it decides its own icon, its color, 
 
 ## Highlights
 
-- **Out of the way until you want it.** A 14 px frosted tab on the right edge. Rest on it, click it, or press `Ctrl+Alt+Space`.
+- **Out of the way until you want it.** A 14 px frosted tab on the right edge. Rest on it, click it, or press `Ctrl+Shift+H`.
 - **Previews without opening anything.** Hover a tile and the app's preview slides out like a drawer. Previews can be pages on disk, so they show even when the app isn't running. Moving between tiles crossfades, never reloads.
 - **Never steals your focus.** The dock opens on hover without taking the keyboard from what you're typing in. Only a click outside, `Esc`, the shortcut, or opening an app closes it, so a stray mouse move can't make it vanish.
 - **Apps take the edge.** When an app opens its own side panel, the dock folds into the edge and the tab steps aside until the panel closes.
@@ -77,7 +77,7 @@ The installer isn't code-signed, so Windows SmartScreen may warn you the first t
 <img align="right" width="300" src="docs/images/settings-dark.png#gh-dark-mode-only" alt="The Holster settings panel: apps with their status, theme, shortcut and behavior">
 <img align="right" width="300" src="docs/images/settings-light.png#gh-light-mode-only" alt="The Holster settings panel: apps with their status, theme, shortcut and behavior">
 
-- **Open the dock**: rest the cursor on the tab for a moment, click it, or press `Ctrl+Alt+Space`. The shortcut can be changed in Settings, which also tells you if another app already holds it.
+- **Open the dock**: rest the cursor on the tab for a moment, click it, or press `Ctrl+Shift+H`. The shortcut can be changed in Settings, which also tells you if another app already holds it.
 - **Close it**: click anywhere outside, click the dock's grip, press `Esc` or the shortcut again, or open an app.
 - **Preview an app**: rest on its tile. Move straight into the preview to use it; diagonal paths over other tiles are fine.
 - **Open an app**: click its tile. Apps that aren't running are started, with a spinner tracing the tile until they answer.
