@@ -243,21 +243,30 @@ code {
   overflow: hidden;
   --fade-top: 0px;
   --fade-bottom: 0px;
-  -webkit-mask-image: linear-gradient(
+  /* Eased, so the edge tile visibly dissolves into the edge: reads as "more
+     this way", while its icon stays legible. */
+  --fade-mask: linear-gradient(
     to bottom,
     transparent 0,
+    rgba(0, 0, 0, 0.08) calc(var(--fade-top) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--fade-top) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--fade-top) * 0.75),
     #000 var(--fade-top),
     #000 calc(100% - var(--fade-bottom)),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--fade-bottom) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--fade-bottom) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--fade-bottom) * 0.25),
     transparent 100%
   );
-  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  -webkit-mask-image: var(--fade-mask);
+  mask-image: var(--fade-mask);
   transition: --fade-top 0.28s ease, --fade-bottom 0.28s ease;
 }
 .dock-column.fade-top {
-  --fade-top: 26px;
+  --fade-top: 56px;
 }
 .dock-column.fade-bottom {
-  --fade-bottom: 26px;
+  --fade-bottom: 56px;
 }
 .dock-tiles {
   display: flex;
