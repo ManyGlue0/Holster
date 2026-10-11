@@ -17,7 +17,7 @@ let queuedTint: string | null = null;
 export function Edge() {
   const mode = useStore((s) => s.shell.mode);
   const tucked = useStore((s) => s.shell.tucked);
-  const dockDelay = useStore((s) => s.settings?.delays.dock ?? 120);
+  const dockDelay = useStore((s) => s.settings?.delays.dock ?? 300);
   const tint = useAnimationControls();
   const gesture = useRef<{ y: number; dragging: boolean; frame: number } | null>(null);
   const intent = useRef<number | null>(null);

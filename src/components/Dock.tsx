@@ -267,7 +267,7 @@ function inTriangle(p: Sample, a: Sample | { x: number; y: number }, b: { x: num
 
 function usePreviewController() {
   const shownId = useStore((s) => s.preview.appId);
-  const delays = useStore((s) => s.settings?.delays) ?? { dock: 120, preview: 150, previewGrace: 250 };
+  const delays = useStore((s) => s.settings?.delays) ?? { dock: 300, preview: 150, previewGrace: 250 };
   const r = useRef({
     hovered: null as { id: string; el: HTMLElement } | null,
     overPreview: false,

@@ -68,7 +68,7 @@ There are no prebuilt releases yet, so build it from source. It takes a few minu
    pnpm tauri build
    ```
 
-3. Run `target\release\bundle\nsis\Holster_0.1.0_x64-setup.exe`. It installs for the current user (no admin rights) and starts with Windows by default.
+3. Run `target\release\bundle\nsis\Holster_0.1.1_x64-setup.exe`. It installs for the current user (no admin rights) and starts with Windows by default.
 
 The installer isn't code-signed, so Windows SmartScreen may warn you the first time ("More info", then "Run anyway").
 
@@ -129,7 +129,7 @@ Holster listens on a random loopback port and writes it to `%APPDATA%\Holster\ho
 
 | | |
 |---|---|
-| `GET /status` | `{ "running": true, "version": "0.1.0" }` |
+| `GET /status` | `{ "running": true, "version": "0.1.1" }` |
 | `POST /apps/{id}/signal` | body `{ "kind": "activity" }`: the tab glows in the app's color |
 | `POST /apps/{id}/reload` | re-reads the manifests and answers with that app's validation result |
 | `GET /apps/{id}/preview/{file}` | serves an app's on-disk preview folder, so previews work while the app is closed |

@@ -73,7 +73,7 @@ impl Default for TabSettings {
 
 impl Default for Delays {
     fn default() -> Self {
-        Self { dock: 120, preview: 150, preview_grace: 250 }
+        Self { dock: 300, preview: 150, preview_grace: 250 }
     }
 }
 
