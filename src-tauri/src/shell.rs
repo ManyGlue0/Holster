@@ -1291,6 +1291,13 @@ impl Shell {
         (self.main.anim.target().t + client_y * g.scale).round()
     }
 
+    /// The tab's vertical center in screen px: where it comes back when an
+    /// app's panel closes.
+    pub fn tab_y(&self) -> f64 {
+        let t = self.geometry().tab;
+        ((t.t + t.b) / 2.0).round()
+    }
+
     // ---- tucking (game mode, app panels) ---------------------------------------------------
 
     pub fn monitor_bounds(&self) -> Rect {

@@ -155,7 +155,10 @@ Template:
 
 **`panel`**: your app slides out its own side panel (see 3.8).
 
-- Holster `POST`s `open.url` with JSON `{ "edge": "right", "anchorY": 433 }`. `anchorY` is the vertical center of the clicked tile in **physical screen pixels**. Use it if your panel opens from a point; full-height panels can ignore it.
+- Holster `POST`s `open.url` with JSON `{ "edge": "right", "anchorY": 433, "tabY": 512 }`, both in **physical screen pixels**:
+  - `anchorY` is the vertical center of the clicked tile. **Open from it**: the panel unfolds out of the tile that was clicked.
+  - `tabY` is the vertical center of Holster's tab, which is where the tab comes back once your panel is gone. **Close toward it**, not back to `anchorY`, so the panel folds into the edge exactly where the tab reappears. Read it on every open: the user can move the tab between opens.
+  - A full-height panel that doesn't morph from a point can ignore both.
 - Answer `2xx` immediately (Holster waits at most 4 s), then open the panel on your UI thread.
 - Holster calls `AllowSetForegroundWindow(ASFW_ANY)` right before the request, so you may take the foreground. Still take focus the robust way (attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`), as Holster does for window apps.
 - While your panel is out, Holster's tab steps aside: the dock folds straight into the edge and the tab stays tucked until the panel is gone, then slides back. Holster recognizes the panel as a visible window of the process serving `open.url` (or of `launch.exe`) whose right side is within 40 px of the screen edge, wider than 160 px, overlapping the work area. Park or hide the panel when it closes; a slim tab of your own on the edge doesn't count. If no such window shows up within 3 s, the tab comes back.
@@ -202,9 +205,10 @@ pub async fn serve_holster(app_handle: tauri::AppHandle) -> anyhow::Result<u16> 
         .route("/holster/open", post(move |Json(body): Json<Value>| {
             let h = open_handle.clone();
             async move {
-                let anchor_y = body.get("anchorY").and_then(Value::as_f64);
+                let anchor_y = body.get("anchorY").and_then(Value::as_f64); // open from here
+                let tab_y = body.get("tabY").and_then(Value::as_f64); // close toward here
                 // Return first; open the panel on the UI side.
-                let _ = h.run_on_main_thread(move || { /* slide the panel out, take focus */ let _ = anchor_y; });
+                let _ = h.run_on_main_thread(move || { /* slide the panel out, take focus */ let _ = (anchor_y, tab_y); });
                 Json(json!({ "ok": true }))
             }
         }));
@@ -425,6 +429,7 @@ Three options everywhere: **System, Light, Dark** (segmented control). Resolve t
 ### 3.8 Side panels
 
 - Same window technique: a frameless, always-on-top, skip-taskbar window whose bounds morph from a slim tab or point on the right edge into the panel (geometry 3.4, springs 3.5). The panel's close grip is drawn exactly like the tab's grip (3×26 at `left: 5px`, centered) inside a 14×48 hit area, so it doesn't move as the panel unfolds.
+- Opened from Holster, the panel unfolds out of the clicked tile (`anchorY`) and folds back toward Holster's tab (`tabY`), never back to the tile: the tab slides out right where the panel disappeared (1.6). Keep your own seed for when the panel is opened some other way.
 - Opening takes focus robustly (on the window's own thread: attach to the foreground thread's input, `BringWindowToTop`, `SetForegroundWindow`) and remembers the previous foreground window. Closing gives focus back to it.
 - Closes on Escape (innermost overlay first), the hotkey again, clicking the grip, or a click outside (blur debounced 100 ms, ignored for the first 350 ms, never while a menu, sheet, picker or IME composition is open). A **session-only pin** (Lucide `pin`, filled when on, `pin-off` on hover) keeps it open until the panel closes.
 - Header: 19px display title on the left, icon buttons (32px, radius 9) on the right. Body: grouped cards (`--surface`, hairline `--border`, radius 12, 4px 12px padding) with 46px rows separated by hairlines, labels with an 11.5px hint below.

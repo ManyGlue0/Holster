@@ -98,7 +98,7 @@ pub async fn list_apps(core: C<'_>) -> Res<Vec<AppView>> {
 #[tauri::command]
 pub async fn open_app(core: C<'_>, id: String, anchor_y: f64) -> Res<()> {
     let shell = core.shell().clone();
-    let result = open_app_inner(&core, &id, shell.screen_y(anchor_y)).await;
+    let result = open_app_inner(&core, &id, shell.screen_y(anchor_y), shell.tab_y()).await;
     match &result {
         Ok(Some(pids)) => {
             shell.cover_with(pids.clone());
@@ -112,8 +112,9 @@ pub async fn open_app(core: C<'_>, id: String, anchor_y: f64) -> Res<()> {
 }
 
 /// Opens the app. For a panel app, returns its processes so the tab can step
-/// aside while the panel is out.
-async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<Option<Vec<u32>>> {
+/// aside while the panel is out. A panel opens from `anchor_screen_y` and
+/// should close toward `tab_y`, where the tab comes back.
+async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64, tab_y: f64) -> Res<Option<Vec<u32>>> {
     let m = core.reg.manifest(id).ok_or("This app's manifest has an error. See Settings, Apps.")?;
     match m.mode {
         OpenMode::Window => {
@@ -153,7 +154,7 @@ async fn open_app_inner(core: &Core, id: &str, anchor_screen_y: f64) -> Res<Opti
                 .health
                 .client()
                 .post(&url)
-                .json(&json!({ "edge": edge, "anchorY": anchor_screen_y }))
+                .json(&json!({ "edge": edge, "anchorY": anchor_screen_y, "tabY": tab_y }))
                 .timeout(Duration::from_secs(4))
                 .send()
                 .await
