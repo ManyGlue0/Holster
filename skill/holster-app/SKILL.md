@@ -7,7 +7,7 @@ description: Use when making a new app, or adapting an existing one, so it shows
 
 Holster is a Windows 11 dock that lives on the right screen edge as a slim frosted tab. Hovering it opens a column of app tiles; hovering a tile shows that app's **preview** to the left of the dock; clicking a tile **opens** the app. Holster is only the frame. Each app decides its icon, its color, its preview and how it opens, through one small manifest.
 
-This file is everything you need: the contract, the required stack, the design language with real values, and the taste rules. Holster itself and its example app (`examples/hello-holster`) follow all of it.
+This file is everything you need: the contract, the required stack, the design language with real values, the taste rules, and how to ship each build. Holster itself and its example app (`examples/hello-holster`) follow all of it.
 
 ## Checklist
 
@@ -17,6 +17,7 @@ This file is everything you need: the contract, the required stack, the design l
 4. Panel apps: answer `POST /holster/open` fast, then slide your panel out. Window apps: be single-instance.
 5. Optional: `POST` an `activity` signal to Holster when something meaningful happens.
 6. Check your app in Holster's Settings, Apps: no error, no warnings, status "Running".
+7. Finish every round of changes with a new version and a release build, and tell the user the installer's full path (5).
 
 ---
 
@@ -448,3 +449,14 @@ Three options everywhere: **System, Light, Dark** (segmented control). Resolve t
 - **Empty, loading and error states are designed, not blank**: an icon in a soft accent well, a 16px/600 title, one sentence of help, and the next action.
 - **Respect the user's attention**: never steal focus on hover, never animate on a timer, signal only when it matters, and stay out of the way of fullscreen apps.
 - Sentence case everywhere. Short, plain labels ("Add app", "Not running", "Open folder").
+
+---
+
+## 5. Shipping each build
+
+Work isn't finished until the user has something to install. At the end of every round of changes:
+
+1. **Bump the version, every build.** Never ship two different builds under one version: the installer would replace the app without anyone being able to tell which build is running. Patch (`0.1.0` → `0.1.1`) for fixes and small changes, minor (`0.1.1` → `0.2.0`) for new features. Change it everywhere it lives and keep them identical. For a Tauri app that's `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (then let the build update `Cargo.lock`), plus any README line that names the version or the installer file.
+2. **Build the release installer** (`pnpm tauri build` for the stack above), after the tests pass. A dev run is not a build.
+3. **Check that the installer exists and is new**: the file name carries the new version and its timestamp is from this build. It's under `target\release\bundle\nsis\` (`src-tauri\target\...` when the app isn't a Cargo workspace), named `<productName>_<version>_x64-setup.exe`.
+4. **End your reply with the installer's full absolute path**, e.g. `E:\Code\Notes\target\release\bundle\nsis\Notes_0.1.1_x64-setup.exe`, and the new version number. If the build failed, say so with the error instead; never report an installer from an earlier build as the new one.

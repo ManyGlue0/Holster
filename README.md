@@ -111,7 +111,7 @@ An app joins Holster by writing a manifest to `%APPDATA%\Holster\apps\<id>.json`
 - **Open**: `panel` (Holster calls your `open.url` and you slide out your own panel) or `window` (Holster starts or focuses your exe).
 - Every URL must be `http://127.0.0.1`. Holster talks to nothing else.
 
-**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, security, a minimal server, the recommended stack, and the design language with exact values (tokens, palette, material, geometry, springs). It is written as an [Agent Skill](https://agentskills.io), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
+**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
 
 Install it into your agent (Claude Code, Codex, Cursor and [many more](https://github.com/vercel-labs/skills#supported-agents)) with one command:
 
