@@ -56,10 +56,24 @@ A preview is just a web page that your app ships: transparent, theme-aware, size
 
 ## Install
 
-There are no prebuilt releases yet, so build it from source. It takes a few minutes the first time.
+### Download
 
-1. Install the prerequisites: [Rust](https://rustup.rs) (stable, MSVC), [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io), and the Visual Studio C++ Build Tools. WebView2 already ships with Windows 11.
-2. Build the installer:
+Get the installer (`Holster_<version>_x64-setup.exe`) from the **[latest release](https://github.com/ManyGlue0/Holster/releases/latest)** and run it. It installs for the current user (no admin rights needed) and starts with Windows by default; you can turn that off in Settings.
+
+The installer isn't code-signed, so Windows SmartScreen may warn you the first time: click **More info**, then **Run anyway**.
+
+To update, run a newer installer over the old one. Your apps and settings live in `%APPDATA%\Holster` and are kept.
+
+### Build it yourself
+
+If you'd rather build from the source code, it takes a few minutes the first time.
+
+1. Install the tools once:
+   - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload (the Rust compiler needs its linker).
+   - [Rust](https://rustup.rs), with the default options (stable, MSVC).
+   - [Node.js](https://nodejs.org) 20 or newer, then [pnpm](https://pnpm.io/installation) (`npm install -g pnpm`).
+   - WebView2 is already part of Windows 11.
+2. Get the code and build the installer:
 
    ```sh
    git clone https://github.com/ManyGlue0/Holster.git
@@ -68,9 +82,9 @@ There are no prebuilt releases yet, so build it from source. It takes a few minu
    pnpm tauri build
    ```
 
-3. Run `target\release\bundle\nsis\Holster_0.1.1_x64-setup.exe`. It installs for the current user (no admin rights) and starts with Windows by default.
+3. The installer is in `target\release\bundle\nsis\`. Run it like the downloaded one.
 
-The installer isn't code-signed, so Windows SmartScreen may warn you the first time ("More info", then "Run anyway").
+To run Holster straight from the source without installing it, see [Development](#development).
 
 ## Using it
 
@@ -111,9 +125,9 @@ An app joins Holster by writing a manifest to `%APPDATA%\Holster\apps\<id>.json`
 - **Open**: `panel` (Holster calls your `open.url` and you slide out your own panel) or `window` (Holster starts or focuses your exe).
 - Every URL must be `http://127.0.0.1`. Holster talks to nothing else.
 
-**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
+**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io) (the open `SKILL.md` format), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
 
-Install it into your agent (Claude Code, Codex, Cursor and [many more](https://github.com/vercel-labs/skills#supported-agents)) with one command:
+Install it into your agent (Claude Code, Codex, Cursor and many more) with one command, using the [skills](https://skills.sh) CLI:
 
 ```sh
 npx skills add https://github.com/ManyGlue0/Holster/skill/holster-app
@@ -129,7 +143,7 @@ Holster listens on a random loopback port and writes it to `%APPDATA%\Holster\ho
 
 | | |
 |---|---|
-| `GET /status` | `{ "running": true, "version": "0.1.1" }` |
+| `GET /status` | `{ "running": true, "version": "x.y.z" }` |
 | `POST /apps/{id}/signal` | body `{ "kind": "activity" }`: the tab glows in the app's color |
 | `POST /apps/{id}/reload` | re-reads the manifests and answers with that app's validation result |
 | `GET /apps/{id}/preview/{file}` | serves an app's on-disk preview folder, so previews work while the app is closed |
