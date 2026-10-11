@@ -63,7 +63,8 @@ export function Button({
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} className={`toggle ${on ? "on" : ""}`} onClick={() => onChange(!on)}>
-      <motion.span className="toggle-knob" layout transition={spring} />
+      {/* Animates its offset in the track, not a layout animation, which would also chase the row while it's dragged. */}
+      <motion.span className="toggle-knob" initial={false} animate={{ x: on ? 16 : 0 }} transition={spring} />
     </button>
   );
 }

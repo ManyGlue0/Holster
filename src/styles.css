@@ -651,7 +651,6 @@ code {
 }
 .toggle.on {
   background: var(--accent);
-  justify-content: flex-end;
 }
 .toggle-knob {
   width: 16px;
