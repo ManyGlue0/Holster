@@ -331,24 +331,12 @@ pub async fn note_drag(core: C<'_>, key: u64, phase: String, dx: f64) -> Res<()>
     Ok(())
 }
 
+/// A button was pressed (or a page sent an action). If the button opens the
+/// app, it opens the way the manifest says, its panel unfolding from the
+/// card's height; if that fails, the reason comes back as a notification.
 #[tauri::command]
-pub async fn note_action(core: C<'_>, key: u64, button: String) -> Res<()> {
-    core.notifier().action(key, &button);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn note_dismiss(core: C<'_>, key: u64) -> Res<()> {
-    core.notifier().dismiss(key);
-    Ok(())
-}
-
-/// The card was clicked: it closes and its app opens the way the manifest
-/// says, its panel unfolding from the card's height. If that fails, the
-/// reason comes back as a notification.
-#[tauri::command]
-pub async fn note_open(core: C<'_>, key: u64) -> Res<()> {
-    let Some((id, cy)) = core.notifier().clicked(key) else { return Ok(()) };
+pub async fn note_action(core: C<'_>, key: u64, button: String, open: bool) -> Res<()> {
+    let Some((id, cy)) = core.notifier().action(key, &button, open) else { return Ok(()) };
     let shell = core.shell().clone();
     match open_app_inner(&core, &id, cy, shell.tab_y()).await {
         Ok(Some(pids)) => shell.cover_with(pids),
@@ -360,5 +348,11 @@ pub async fn note_open(core: C<'_>, key: u64) -> Res<()> {
         }
     }
     core.health.poke();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_dismiss(core: C<'_>, key: u64) -> Res<()> {
+    core.notifier().dismiss(key);
     Ok(())
 }

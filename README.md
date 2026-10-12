@@ -99,7 +99,7 @@ To run Holster straight from the source without installing it, see [Development]
 - **More than five apps**: scroll the column with the wheel. It moves one tile at a time, with soft fades where more apps are hidden.
 - **Move it**: drag the tab, or the dock's grip, up or down.
 - **Settings**: the gear card below the dock, or the tray icon. Reorder apps by dragging, hide them, mute their notifications (the bell), remove them, or add a manifest by hand. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, Do not disturb (also in the tray menu), notification sound, and hover timing.
-- **Notifications**: click one to open its app, press its buttons, or flick it back into the edge (the `×` on hover works too). Resting the cursor on a card keeps it there.
+- **Notifications**: press a button (an app can make one open it), or flick the card back into the edge (the `×` on hover works too). Clicking the card itself does nothing. Resting the cursor on a card keeps it there.
 
 <br clear="right">
 
@@ -125,7 +125,7 @@ An app joins Holster by writing a manifest to `%APPDATA%\Holster\apps\<id>.json`
 - **Color**: a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`) or any hex color.
 - **Preview**: a page on disk (served by Holster, so it works while your app is closed), a live page from your running app, or both.
 - **Open**: `panel` (Holster calls your `open.url` and you slide out your own panel) or `window` (Holster starts or focuses your exe).
-- **Notify** (optional): `notify.url` hears what happened to your notifications (a button, a click, dismissed, expired).
+- **Notify** (optional): `notify.url` hears what happened to your notifications (a button, dismissed, expired).
 - Every URL must be `http://127.0.0.1`. Holster talks to nothing else.
 
 **The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, notifications, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io) (the open `SKILL.md` format), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.

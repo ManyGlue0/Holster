@@ -64,6 +64,8 @@ pub struct Button {
     pub id: String,
     pub label: String,
     pub primary: bool,
+    /// Pressing it also opens the app the way its manifest says.
+    pub open: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -164,8 +166,13 @@ pub fn parse_request(v: &Value) -> Result<Request, String> {
                             return Err(format!("two buttons share the id \"{id}\""));
                         }
                         let label = short_text(b, "label", 24)?.ok_or("each button needs a label")?;
-                        let primary = b.get("primary").and_then(Value::as_bool).unwrap_or(false);
-                        out.push(Button { id: id.to_string(), label, primary });
+                        let flag = |k: &str| match b.get(k) {
+                            None | Some(Value::Null) => Ok(false),
+                            Some(Value::Bool(v)) => Ok(*v),
+                            Some(_) => Err(format!("button.{k} must be true or false")),
+                        };
+                        let (primary, open) = (flag("primary")?, flag("open")?);
+                        out.push(Button { id: id.to_string(), label, primary, open });
                     }
                     out
                 }
@@ -393,30 +400,24 @@ impl Notifier {
         self.finish(key, Some("dismissed"), None);
     }
 
-    pub fn action(self: &Arc<Self>, key: u64, button: &str) {
-        // Text cards only send their own buttons; a page names its actions.
-        let known = self.st.lock().unwrap().notes.iter().any(|n| {
-            n.key == key
-                && match &n.content {
-                    Content::Text { buttons, .. } => buttons.iter().any(|b| b.id == button),
-                    Content::Page { .. } => valid_token(button),
-                }
-        });
-        if known {
-            self.finish(key, Some("action"), Some(button));
-        }
-    }
-
-    /// The card was clicked: it closes, and the caller opens the app. Returns
-    /// the app id and the card's vertical center (screen px).
-    pub fn clicked(self: &Arc<Self>, key: u64) -> Option<(String, f64)> {
-        let (app, cy) = {
+    /// A button was pressed: the card closes and the app hears `action`. A
+    /// text card only sends its own buttons, and opens the app when the
+    /// button says so; a page names its actions and asks to open (`open`).
+    /// Returns the app id and the card's vertical center (screen px) when the
+    /// caller should open the app.
+    pub fn action(self: &Arc<Self>, key: u64, button: &str, page_open: bool) -> Option<(String, f64)> {
+        let (open, app, cy) = {
             let st = self.st.lock().unwrap();
             let n = st.notes.iter().find(|n| n.key == key)?;
-            (n.app.clone(), ((n.rect.t + n.rect.b) / 2.0).round())
+            let open = match &n.content {
+                Content::Text { buttons, .. } => buttons.iter().find(|b| b.id == button)?.open,
+                Content::Page { .. } if valid_token(button) => page_open,
+                Content::Page { .. } => return None,
+            };
+            (open, n.app.clone(), ((n.rect.t + n.rect.b) / 2.0).round())
         };
-        self.finish(key, Some("clicked"), None);
-        Some((app, cy))
+        self.finish(key, Some("action"), Some(button));
+        open.then_some((app, cy))
     }
 
     /// Removes a notification, folds its card, and tells the app why.
@@ -776,6 +777,11 @@ mod tests {
         let Content::Text { title, buttons, .. } = r.content else { panic!() };
         assert_eq!(title, "Meeting");
         assert!(buttons[1].primary && !buttons[0].primary);
+        assert!(!buttons[0].open && !buttons[1].open);
+        let r = parse_request(&json!({ "title": "x", "buttons": [{ "id": "join", "label": "Join", "open": true }] })).unwrap();
+        let Content::Text { buttons, .. } = r.content else { panic!() };
+        assert!(buttons[0].open);
+        assert!(parse_request(&json!({ "title": "x", "buttons": [{ "id": "a", "label": "A", "open": "yes" }] })).is_err());
     }
 
     #[test]

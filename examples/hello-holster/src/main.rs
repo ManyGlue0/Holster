@@ -224,7 +224,7 @@ fn notify(stays: bool) -> bool {
         r#"{"id":"hello-stays","title":"This one stays","body":"Until you press a button, click the x, or flick it into the edge.","buttons":[{"id":"done","label":"Got it","primary":true}],"timeout":0}"#.to_string()
     } else {
         format!(
-            r#"{{"id":"hello","title":"Hello from Hello Holster","body":"It's {h:02}:{m:02}:{s:02}. This one goes away by itself in 8 seconds.","buttons":[{{"id":"snooze","label":"Snooze"}},{{"id":"done","label":"Done","primary":true}}],"timeout":8}}"#
+            r#"{{"id":"hello","title":"Hello from Hello Holster","body":"It's {h:02}:{m:02}:{s:02}. This one goes away by itself in 8 seconds.","buttons":[{{"id":"snooze","label":"Snooze"}},{{"id":"open","label":"Open","primary":true,"open":true}}],"timeout":8}}"#
         )
     };
     holster_post(&format!("/apps/{ID}/notify"), &body)
@@ -237,8 +237,9 @@ fn field<'a>(json: &'a str, key: &str) -> Option<&'a str> {
     rest.split('"').next()
 }
 
-/// Holster reports what happened to a notification: `clicked`, `action`
-/// (with `button`), `dismissed` or `expired`.
+/// Holster reports what happened to a notification: `action` (with
+/// `button`), `dismissed` or `expired`. Open is marked `"open": true`, so
+/// Holster also brings this window forward when it's pressed.
 fn on_notify_event(body: &str) {
     let event = field(body, "event").unwrap_or("?");
     let line = match (event, field(body, "button")) {
@@ -249,8 +250,8 @@ fn on_notify_event(body: &str) {
             });
             "Snoozed: it comes back in 10 seconds.".to_string()
         }
+        ("action", Some("open")) => "Opened from the notification.".to_string(),
         ("action", Some(b)) => format!("You pressed {b}."),
-        ("clicked", _) => "You clicked the notification.".to_string(),
         ("dismissed", _) => "You dismissed it.".to_string(),
         ("expired", _) => "It went away by itself.".to_string(),
         (e, _) => format!("Holster says: {e}"),

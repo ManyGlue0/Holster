@@ -81,6 +81,8 @@ export interface NoteButton {
   id: string;
   label: string;
   primary: boolean;
+  /** Pressing it also opens the app. */
+  open: boolean;
 }
 
 export type NoteContent =
@@ -139,9 +141,9 @@ export const api = {
   noteResize: (key: number, width: number, height: number) => invoke("note_resize", { key, width, height }),
   noteHover: (key: number, on: boolean) => invoke("note_hover", { key, on }),
   noteDrag: (key: number, phase: "move" | "end", dx: number) => invoke("note_drag", { key, phase, dx }),
-  noteAction: (key: number, button: string) => invoke("note_action", { key, button }),
+  /** `open` only counts for pages; a text card's button carries its own. */
+  noteAction: (key: number, button: string, open = false) => invoke("note_action", { key, button, open }),
   noteDismiss: (key: number) => invoke("note_dismiss", { key }),
-  noteOpen: (key: number) => invoke("note_open", { key }),
 
   /** The preview window tells the dock whether the cursor is over it. */
   previewHover: (on: boolean) => emitTo("main", "preview-hover", on),

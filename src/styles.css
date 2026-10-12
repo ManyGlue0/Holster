@@ -517,11 +517,11 @@ code {
   align-items: center;
   height: 100%;
 }
+/* Not a button: only its buttons, the x and a flick do anything. */
 .note {
   position: relative;
   flex: none;
   padding: 11px 12px 12px 14px;
-  cursor: pointer;
   user-select: none;
 }
 .note-head {

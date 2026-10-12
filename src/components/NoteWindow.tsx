@@ -56,8 +56,9 @@ export function NoteWindow({ slot }: { slot: number }) {
 }
 
 /** A card Holster draws: the app's tile and name, the title, a few lines of
- *  text and up to two buttons. Click it to open the app; flick it into the
- *  edge to dismiss it. */
+ *  text and up to two buttons. The card itself does nothing on a click (only
+ *  a button the app marks `open` opens it); flick it into the edge to dismiss
+ *  it. */
 function TextNote({ noteKey, content, app }: { noteKey: number; content: TextContent; app: AppView }) {
   const ref = useRef<HTMLDivElement>(null);
   const press = useRef<{ x: number; dragging: boolean; frame: number; dx: number } | null>(null);
@@ -98,7 +99,6 @@ function TextNote({ noteKey, content, app }: { noteKey: number; content: TextCon
     if (!p) return;
     if (p.frame) cancelAnimationFrame(p.frame);
     if (p.dragging) api.noteDrag(noteKey, "end", Math.max(0, p.dx));
-    else api.noteOpen(noteKey);
   };
 
   return (
@@ -136,7 +136,7 @@ function TextNote({ noteKey, content, app }: { noteKey: number; content: TextCon
 }
 
 /** The app's own page, in Holster's card. It speaks the preview protocol
- *  (theme, resize) plus `action`, `open` and `close`. With `dismiss: false`
+ *  (theme, resize) plus `action` (optionally opening the app) and `close`. With `dismiss: false`
  *  the page draws its own way out and Holster leaves out its `×`. */
 function PageNote({ noteKey, content }: { noteKey: number; content: PageContent }) {
   const dark = useDark();
@@ -158,14 +158,13 @@ function PageNote({ noteKey, content }: { noteKey: number; content: PageContent 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow || e.origin !== origin) return;
-      const d = e.data as { holster?: string; width?: unknown; height?: unknown; button?: unknown } | null;
+      const d = e.data as { holster?: string; width?: unknown; height?: unknown; button?: unknown; open?: unknown } | null;
       if (!d) return;
       if (d.holster === "resize") {
         const w = Number(d.width);
         const h = Number(d.height);
         if (Number.isFinite(w) && Number.isFinite(h)) api.noteResize(noteKey, w, h);
-      } else if (d.holster === "action" && typeof d.button === "string") api.noteAction(noteKey, d.button);
-      else if (d.holster === "open") api.noteOpen(noteKey);
+      } else if (d.holster === "action" && typeof d.button === "string") api.noteAction(noteKey, d.button, d.open === true);
       else if (d.holster === "close") api.noteDismiss(noteKey);
     };
     window.addEventListener("message", onMessage);

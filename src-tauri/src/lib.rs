@@ -353,7 +353,6 @@ pub fn run() {
             commands::note_drag,
             commands::note_action,
             commands::note_dismiss,
-            commands::note_open,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Holster");

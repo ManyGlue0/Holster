@@ -201,7 +201,7 @@ Content-Type: application/json
   "body": "Design review with the team",
   "buttons": [
     { "id": "snooze", "label": "Snooze" },
-    { "id": "join", "label": "Join", "primary": true }
+    { "id": "join", "label": "Join", "primary": true, "open": true }
   ],
   "timeout": 8
 }
@@ -214,13 +214,13 @@ Holster answers `{ "ok": true, "id": "meeting-42", "muted": false }`, or `400` w
 | `id` | Optional: your own id, 1–64 characters. Sending the same `id` again updates that notification in place (new content, its timer starts over). Without one, Holster makes one up and returns it. |
 | `title` | Required (unless `page`). Up to 120 characters; two lines show. |
 | `body` | Optional. Up to 500 characters; three lines show. |
-| `buttons` | Optional, at most 2: `id` (1–64 characters), `label` (up to 24), `primary` (the filled one: the main action). |
+| `buttons` | Optional, at most 2: `id` (1–64 characters), `label` (up to 24), `primary` (the filled one: the main action), `open` (pressing it also opens your app the way the manifest says). |
 | `timeout` | Seconds on screen: default 6, up to 3600. `0` stays until the user deals with it. |
 | `page` | Instead of title, body and buttons: `{ "url": "http://127.0.0.1:…", "width": 340, "height": 120 }` (width 200–480, height 48–480). Your own page in Holster's card. Add `"dismiss": false` when the page draws its own way to dismiss it (see below). |
 
 How it behaves:
 
-- Holster draws the card in its own design language: your tile (icon in your color), your app's name, the title, the text and the buttons. Clicking the card opens your app the way the manifest says (a panel unfolds from the card's height); a button closes it; the `×` (on hover) or a flick into the edge dismisses it.
+- Holster draws the card in its own design language: your tile (icon in your color), your app's name, the title, the text and the buttons. The card itself is not a button: a click on it does nothing. A button closes it, and opens your app (the way the manifest says, a panel unfolding from the card's height) only if you marked it `"open": true`, so the user sees what will happen. The `×` (on hover) or a flick into the edge dismisses it.
 - A timed notification only counts down while it's on screen, and waits while the cursor is on it. Notifications wait, timers included, while the dock or Settings is open (your tile pulses instead), during a fullscreen app (when the user hides Holster for those), while an app panel is on the edge, and during Do not disturb.
 - Nothing is stored: an expired notification is simply gone. Keep your own history if you need one.
 - The user can mute your app's notifications in Settings. Holster then answers `"muted": true` and shows nothing.
@@ -232,13 +232,12 @@ How it behaves:
 { "id": "meeting-42", "event": "action", "button": "snooze" }
 ```
 
-`event` is `clicked` (the card itself; your app is being opened), `action` (a button, with its `button` id), `dismissed` (the `×`, or flicked away) or `expired` (its time ran out). Nothing is sent when you take one back yourself. Answer fast: Holster doesn't wait for you or retry.
+`event` is `action` (a button, with its `button` id; your app is being opened too if that button opens it), `dismissed` (the `×`, or flicked away) or `expired` (its time ran out). Nothing is sent when you take one back yourself. Answer fast: Holster doesn't wait for you or retry.
 
 **Custom pages** follow the preview rules (1.5): transparent, theme-aware (`?theme=` and `theme` messages), `color-scheme` matching the theme, no card or shadow of your own. Keep the top-right 32×32 px free: Holster draws the dismiss `×` there on hover. A page whose design has its own dismiss control (a skip button beside its main action) sends `"dismiss": false`: Holster then draws no `×`, and the page must send `close` itself, because a page card can't be flicked away (the page gets the pointer). Holster checks that `page.url` answers before it believes that: if it doesn't, the card keeps Holster's `×` and the response carries a `warning`. A `timeout` is a good second safety net. The page talks to Holster with `parent.postMessage(msg, "*")`:
 
 - `{ holster: "resize", width, height }`: a new size.
-- `{ holster: "action", button: "<id>" }`: closes the card and sends you `action` with that id.
-- `{ holster: "open" }`: like a click on a card Holster draws.
+- `{ holster: "action", button: "<id>" }`: closes the card and sends you `action` with that id. Add `open: true` to also open your app, like a button marked `open`.
 - `{ holster: "close" }`: dismisses it.
 
 When to notify: something the user wants to know now and can act on (a meeting starting, a long job done, a reply they're waiting for). Not progress chatter, not promotions, never on a timer. For "something happened, look when you like", a signal (1.7) is calmer.
