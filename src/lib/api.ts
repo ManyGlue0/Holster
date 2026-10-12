@@ -85,7 +85,7 @@ export interface NoteButton {
 
 export type NoteContent =
   | { kind: "text"; title: string; body: string | null; buttons: NoteButton[] }
-  | { kind: "page"; url: string; width: number; height: number };
+  | { kind: "page"; url: string; width: number; height: number; dismiss: boolean };
 
 /** What one notification window shows. */
 export interface NoteSlot {

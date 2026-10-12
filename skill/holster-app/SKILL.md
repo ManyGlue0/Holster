@@ -216,7 +216,7 @@ Holster answers `{ "ok": true, "id": "meeting-42", "muted": false }`, or `400` w
 | `body` | Optional. Up to 500 characters; three lines show. |
 | `buttons` | Optional, at most 2: `id` (1–64 characters), `label` (up to 24), `primary` (the filled one: the main action). |
 | `timeout` | Seconds on screen: default 6, up to 3600. `0` stays until the user deals with it. |
-| `page` | Instead of title, body and buttons: `{ "url": "http://127.0.0.1:…", "width": 340, "height": 120 }` (width 200–480, height 48–480). Your own page in Holster's card. |
+| `page` | Instead of title, body and buttons: `{ "url": "http://127.0.0.1:…", "width": 340, "height": 120 }` (width 200–480, height 48–480). Your own page in Holster's card. Add `"dismiss": false` when the page draws its own way to dismiss it (see below). |
 
 How it behaves:
 
@@ -234,7 +234,7 @@ How it behaves:
 
 `event` is `clicked` (the card itself; your app is being opened), `action` (a button, with its `button` id), `dismissed` (the `×`, or flicked away) or `expired` (its time ran out). Nothing is sent when you take one back yourself. Answer fast: Holster doesn't wait for you or retry.
 
-**Custom pages** follow the preview rules (1.5): transparent, theme-aware (`?theme=` and `theme` messages), `color-scheme` matching the theme, no card or shadow of your own. Keep the top-right 32×32 px free: Holster draws the dismiss `×` there on hover. The page talks to Holster with `parent.postMessage(msg, "*")`:
+**Custom pages** follow the preview rules (1.5): transparent, theme-aware (`?theme=` and `theme` messages), `color-scheme` matching the theme, no card or shadow of your own. Keep the top-right 32×32 px free: Holster draws the dismiss `×` there on hover. A page whose design has its own dismiss control (a skip button beside its main action) sends `"dismiss": false`: Holster then draws no `×`, and the page must send `close` itself, because a page card can't be flicked away (the page gets the pointer). Holster checks that `page.url` answers before it believes that: if it doesn't, the card keeps Holster's `×` and the response carries a `warning`. A `timeout` is a good second safety net. The page talks to Holster with `parent.postMessage(msg, "*")`:
 
 - `{ holster: "resize", width, height }`: a new size.
 - `{ holster: "action", button: "<id>" }`: closes the card and sends you `action` with that id.

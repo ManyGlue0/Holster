@@ -72,9 +72,10 @@ pub enum Content {
     /// Drawn by Holster.
     #[serde(rename = "text")]
     Text { title: String, body: Option<String>, buttons: Vec<Button> },
-    /// The app's own page, in Holster's card.
+    /// The app's own page, in Holster's card. `dismiss: false` leaves out
+    /// Holster's `×`: the page draws its own way to dismiss (`close`).
     #[serde(rename = "page")]
-    Page { url: String, width: f64, height: f64 },
+    Page { url: String, width: f64, height: f64, dismiss: bool },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -135,10 +136,16 @@ pub fn parse_request(v: &Value) -> Result<Request, String> {
                     Some(_) => Err(format!("page.{k} must be a number")),
                 }
             };
+            let dismiss = match p.get("dismiss") {
+                None | Some(Value::Null) => true,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => return Err("page.dismiss must be true or false".into()),
+            };
             Content::Page {
                 url: url.to_string(),
                 width: dim("width", PAGE_MIN.0, PAGE_MAX.0, PAGE_DEFAULT.0)?,
                 height: dim("height", PAGE_MIN.1, PAGE_MAX.1, PAGE_DEFAULT.1)?,
+                dismiss,
             }
         }
         _ => {
@@ -466,6 +473,22 @@ impl Notifier {
         );
     }
 
+    /// A page that leaves out Holster's `×` must close itself, so it has to
+    /// load. If it doesn't answer, Holster keeps its `×` on the card; returns
+    /// why, for the app.
+    pub async fn check_page(&self, req: &mut Request) -> Option<&'static str> {
+        let Content::Page { url, dismiss, .. } = &mut req.content else { return None };
+        if *dismiss {
+            return None;
+        }
+        let answers = self.health.client().get(url.as_str()).send().await.is_ok_and(|r| r.status().is_success());
+        if answers {
+            return None;
+        }
+        *dismiss = true;
+        Some("page.url didn't answer, so Holster draws its × on this notification")
+    }
+
     fn tell(&self, app: &str, nid: &str, event: &str, button: Option<&str>) {
         let Some(url) = self.reg.manifest(app).and_then(|m| m.notify_url) else { return };
         let mut body = json!({ "id": nid, "event": event });
@@ -776,7 +799,15 @@ mod tests {
     #[test]
     fn pages_are_clamped() {
         let r = parse_request(&json!({ "page": { "url": "http://127.0.0.1:5000/n", "width": 9999 } })).unwrap();
-        assert_eq!(r.content, Content::Page { url: "http://127.0.0.1:5000/n".into(), width: PAGE_MAX.0, height: PAGE_DEFAULT.1 });
+        assert_eq!(r.content, Content::Page { url: "http://127.0.0.1:5000/n".into(), width: PAGE_MAX.0, height: PAGE_DEFAULT.1, dismiss: true });
+    }
+
+    #[test]
+    fn pages_can_bring_their_own_dismiss() {
+        let page = |d: Value| parse_request(&json!({ "page": { "url": "http://127.0.0.1:5000/n", "dismiss": d } }));
+        assert!(matches!(page(json!(false)).unwrap().content, Content::Page { dismiss: false, .. }));
+        assert!(matches!(page(Value::Null).unwrap().content, Content::Page { dismiss: true, .. }));
+        assert!(page(json!("no")).unwrap_err().contains("page.dismiss"));
     }
 
     fn frame(tab_y: f64) -> NoteFrame {

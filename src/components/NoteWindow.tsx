@@ -136,12 +136,13 @@ function TextNote({ noteKey, content, app }: { noteKey: number; content: TextCon
 }
 
 /** The app's own page, in Holster's card. It speaks the preview protocol
- *  (theme, resize) plus `action`, `open` and `close`. */
+ *  (theme, resize) plus `action`, `open` and `close`. With `dismiss: false`
+ *  the page draws its own way out and Holster leaves out its `×`. */
 function PageNote({ noteKey, content }: { noteKey: number; content: PageContent }) {
   const dark = useDark();
   const theme = dark ? "dark" : "light";
   const frame = useRef<HTMLIFrameElement>(null);
-  const { url, width, height } = content;
+  const { url, width, height, dismiss } = content;
   // The URL is fixed for the card's life; theme changes arrive as messages.
   const src = useMemo(() => {
     const u = new URL(url);
@@ -180,9 +181,11 @@ function PageNote({ noteKey, content }: { noteKey: number; content: PageContent 
         sandbox="allow-scripts allow-same-origin allow-forms"
         referrerPolicy="no-referrer"
       />
-      <button className="icon-btn small note-close note-page-close" aria-label="Dismiss" title="Dismiss" onClick={() => api.noteDismiss(noteKey)}>
-        <X size={14} />
-      </button>
+      {dismiss && (
+        <button className="icon-btn small note-close note-page-close" aria-label="Dismiss" title="Dismiss" onClick={() => api.noteDismiss(noteKey)}>
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }

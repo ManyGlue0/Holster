@@ -114,15 +114,20 @@ async fn notify(State(c): State<Ctx>, UrlPath(id): UrlPath<String>, body: axum::
     let Ok(body) = serde_json::from_slice::<Value>(&body) else {
         return bad_request("The body must be JSON".into());
     };
-    let req = match notify::parse_request(&body) {
+    let mut req = match notify::parse_request(&body) {
         Ok(r) => r,
         Err(e) => return bad_request(e),
     };
     if c.reg.manifest(&id).is_none() {
         return unknown(&id);
     }
+    let warning = c.notifier.check_page(&mut req).await;
     let posted = c.notifier.post(&id, req);
-    Json(json!({ "ok": true, "id": posted.id, "muted": posted.muted })).into_response()
+    let mut out = json!({ "ok": true, "id": posted.id, "muted": posted.muted });
+    if let Some(w) = warning {
+        out["warning"] = json!(w);
+    }
+    Json(out).into_response()
 }
 
 async fn withdraw(State(c): State<Ctx>, UrlPath((id, nid)): UrlPath<(String, String)>) -> Response {
