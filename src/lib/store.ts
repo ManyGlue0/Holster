@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { api, type AppView, type DeepPartial, type PreviewState, type Settings, type ShellState } from "./api";
+import { api, type AppView, type DeepPartial, type NoteSlot, type PreviewState, type Settings, type ShellState } from "./api";
 
 export interface Toast {
   id: number;
@@ -13,6 +13,8 @@ interface Store {
   /** Which surface the main window shows; "closing" keeps the last one. */
   surface: "edge" | "panel";
   preview: PreviewState;
+  /** One entry per notification window. */
+  notes: (NoteSlot | null)[];
   settings: Settings | null;
   systemDark: boolean;
   apps: AppView[];
@@ -50,6 +52,7 @@ export const useStore = create<Store>((set, get) => ({
   },
   surface: "edge",
   preview: { appId: null, width: 0, height: 0, fallback: false, error: null, shown: false, rel: null },
+  notes: [],
   settings: null,
   systemDark: window.matchMedia("(prefers-color-scheme: dark)").matches,
   apps: [],

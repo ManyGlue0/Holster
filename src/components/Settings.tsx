@@ -2,7 +2,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, FolderOpen, GripVertical, PackageOpen, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Bell, BellOff, ChevronLeft, ChevronRight, FolderOpen, GripVertical, PackageOpen, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type AppInfo, type AppView } from "../lib/api";
 import { AppIcon } from "../lib/icons";
@@ -76,6 +76,12 @@ export function SettingsPage() {
           </Row>
           <Row label="Hide during fullscreen apps" hint="Games, videos and presentations. The shortcut still opens the dock">
             <Toggle label="Hide during fullscreen apps" on={settings.hideInFullscreen} onChange={(v) => update({ hideInFullscreen: v })} />
+          </Row>
+          <Row label="Do not disturb" hint="Notifications wait until you turn this off. Also in the tray menu">
+            <Toggle label="Do not disturb" on={settings.doNotDisturb} onChange={(v) => update({ doNotDisturb: v })} />
+          </Row>
+          <Row label="Notification sound" hint="A soft sound when a notification pops out">
+            <Toggle label="Notification sound" on={settings.notifySound} onChange={(v) => update({ notifySound: v })} />
           </Row>
           <div className="set-row disclosure-row">
             <button className="disclosure" aria-expanded={advanced} onClick={() => setAdvanced((a) => !a)}>
@@ -220,7 +226,13 @@ function AppRow({ app }: { app: AppView }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
   const [confirming, setConfirming] = useState(false);
   const toast = useStore((s) => s.toast);
+  const updateSettings = useStore((s) => s.updateSettings);
   const status = statusOf(app);
+
+  const setMuted = (muted: boolean) => {
+    const current = useStore.getState().settings?.muted ?? [];
+    updateSettings({ muted: muted ? [...current.filter((id) => id !== app.id), app.id] : current.filter((id) => id !== app.id) });
+  };
 
   const remove = async () => {
     try {
@@ -286,6 +298,15 @@ function AppRow({ app }: { app: AppView }) {
               exit={{ opacity: 0, x: -8 }}
               transition={spring}
             >
+              {!app.error && (
+                <IconButton
+                  label={app.muted ? `Turn on ${app.name} notifications` : `Mute ${app.name} notifications`}
+                  className={`small ${app.muted ? "muted" : ""}`}
+                  onClick={() => setMuted(!app.muted)}
+                >
+                  {app.muted ? <BellOff size={14} /> : <Bell size={14} />}
+                </IconButton>
+              )}
               {!app.error && (
                 <Toggle label={`Show ${app.name} in the dock`} on={!app.hidden} onChange={(v) => api.setAppHidden(app.id, !v)} />
               )}

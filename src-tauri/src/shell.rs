@@ -5,6 +5,8 @@
 //!   for Settings, the full-height panel.
 //! - `gear`: the small settings card detached below the dock.
 //! - `preview`: the hovered app's preview card, to the left of the dock.
+//! - `notify-0..2`: notification cards, popping out next to the tab (see
+//!   `notify.rs`, which decides what they show and where).
 //!
 //! Every shape change animates the native window rect with springs, so the
 //! real acrylic, DWM shadow and rounded corners follow every frame and there
@@ -157,7 +159,7 @@ impl Spring {
     }
 }
 
-type Callback = Box<dyn FnOnce() + Send>;
+pub type Callback = Box<dyn FnOnce() + Send>;
 
 struct AnimState {
     cur: [f64; 4],
@@ -476,9 +478,24 @@ impl State {
     }
 }
 
-struct Win {
-    hwnd: isize,
-    anim: Arc<Animator>,
+pub(crate) struct Win {
+    pub hwnd: isize,
+    pub anim: Arc<Animator>,
+}
+
+/// Notification card windows.
+pub const NOTE_SLOTS: usize = 3;
+
+/// What the notifier needs to place its cards (screen px).
+pub(crate) struct NoteFrame {
+    pub scale: f64,
+    pub work: Rect,
+    pub tab: Rect,
+    /// The tab is busy or away: dock or settings open, tucked for a
+    /// fullscreen app or an app panel. Notifications wait.
+    pub held: bool,
+    /// The dock or settings is open (a new notification pulses its tile).
+    pub open: bool,
 }
 
 pub struct Shell {
@@ -489,12 +506,15 @@ pub struct Shell {
     main: Win,
     gear: Win,
     preview: Win,
+    notes: [Win; NOTE_SLOTS],
     state: Mutex<State>,
+    /// Called whenever the shell's state or the tab's position changes.
+    on_change: OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 static SHELL: OnceLock<Arc<Shell>> = OnceLock::new();
-/// Per window (main, gear, preview): refuse activation on click.
-static NO_ACTIVATE: [AtomicBool; 3] = [AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true)];
+/// Per window (main, gear, preview, notify-0..2): refuse activation on click.
+static NO_ACTIVATE: [AtomicBool; 3 + NOTE_SLOTS] = [const { AtomicBool::new(true) }; 3 + NOTE_SLOTS];
 static MAIN_HWND: AtomicIsize = AtomicIsize::new(0);
 
 fn ex_style(hwnd: isize, set: u32, clear: u32) {
@@ -535,7 +555,7 @@ fn hide(hwnd: isize) {
 /// Moves a card window far off screen instead of hiding it. A hidden window
 /// shows a hollow frame for its first frames when it's shown again; a parked
 /// one stays composed, so it slides in clean.
-fn park(win: &Win) {
+pub(crate) fn park(win: &Win) {
     let r = win.anim.target();
     let (w, h) = (r.w().max(1.0), r.h().max(1.0));
     win.anim.jump(Rect { l: -32000.0, t: -32000.0, r: -32000.0 + w, b: -32000.0 + h });
@@ -593,8 +613,9 @@ impl Shell {
     pub fn install(app: &AppHandle, prefs: Arc<Prefs>, reg: Arc<Registry>, health: Arc<Health>) -> Arc<Shell> {
         let hwnd_of = |label: &str| app.get_webview_window(label).expect(label).hwnd().expect("hwnd").0 as isize;
         let (main, gear, preview) = (hwnd_of("main"), hwnd_of("gear"), hwnd_of("preview"));
+        let notes: [isize; NOTE_SLOTS] = std::array::from_fn(|i| hwnd_of(&format!("notify-{i}")));
         MAIN_HWND.store(main, Ordering::SeqCst);
-        for (i, h) in [main, gear, preview].into_iter().enumerate() {
+        for (i, h) in [main, gear, preview].into_iter().chain(notes).enumerate() {
             prepare_window(h, i);
         }
         let placeholder = Rect { l: 0.0, t: 0.0, r: 1.0, b: 1.0 };
@@ -606,6 +627,7 @@ impl Shell {
             main: Win { hwnd: main, anim: Animator::new(main, placeholder, "main") },
             gear: Win { hwnd: gear, anim: Animator::new(gear, placeholder, "gear") },
             preview: Win { hwnd: preview, anim: Animator::new(preview, placeholder, "preview") },
+            notes: std::array::from_fn(|i| Win { hwnd: notes[i], anim: Animator::new(notes[i], placeholder, &format!("note{i}")) }),
             state: Mutex::new(State {
                 mode: Mode::Closed,
                 hover: false,
@@ -625,6 +647,7 @@ impl Shell {
                 preview_failed: Default::default(),
                 preview_gen: 0,
             }),
+            on_change: OnceLock::new(),
         });
         let _ = SHELL.set(shell.clone());
         let g = shell.geometry();
@@ -634,14 +657,55 @@ impl Shell {
         shell.gear.anim.jump(g.gear_hidden);
         park(&shell.gear);
         park(&shell.preview);
+        for n in &shell.notes {
+            park(n);
+        }
         show(main);
         show(gear);
         show(preview);
+        for n in &shell.notes {
+            show(n.hwnd);
+        }
         shell
     }
 
-    pub fn hwnds(&self) -> [isize; 3] {
-        [self.main.hwnd, self.gear.hwnd, self.preview.hwnd]
+    pub fn hwnds(&self) -> [isize; 3 + NOTE_SLOTS] {
+        let mut out = [self.main.hwnd, self.gear.hwnd, self.preview.hwnd, 0, 0, 0];
+        for (i, n) in self.notes.iter().enumerate() {
+            out[3 + i] = n.hwnd;
+        }
+        out
+    }
+
+    // ---- notification cards (placed by notify.rs) --------------------------------------
+
+    pub(crate) fn set_on_change(&self, f: impl Fn() + Send + Sync + 'static) {
+        let _ = self.on_change.set(Box::new(f));
+    }
+
+    fn changed(&self) {
+        if let Some(f) = self.on_change.get() {
+            f();
+        }
+    }
+
+    pub(crate) fn note_win(&self, slot: usize) -> &Win {
+        &self.notes[slot]
+    }
+
+    pub(crate) fn note_frame(&self) -> NoteFrame {
+        let st = self.state.lock().unwrap();
+        let (held, open) = (st.mode != Mode::Closed || st.tucked(), st.mode != Mode::Closed);
+        drop(st);
+        let g = self.geometry();
+        NoteFrame { scale: g.scale, work: g.work, tab: g.tab, held, open }
+    }
+
+    /// Keeps the tab above a card that's growing out from under it.
+    pub(crate) fn raise_tab(&self) {
+        if visible(self.main.hwnd) {
+            show(self.main.hwnd);
+        }
     }
 
     fn geometry(&self) -> Geometry {
@@ -726,6 +790,7 @@ impl Shell {
 
     fn emit_state(&self) {
         let _ = self.app.emit("shell", self.snapshot());
+        self.changed();
     }
 
     pub fn snapshot(&self) -> ShellState {
@@ -985,6 +1050,7 @@ impl Shell {
                     }
                     _ => self.main.anim.jump(g.tab_hover),
                 }
+                self.changed();
                 false
             }
             _ => {

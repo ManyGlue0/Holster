@@ -16,8 +16,9 @@ This file is everything you need: the contract, the required stack, the design l
 3. If your app has something worth a glance, ship a preview page **on disk** (`preview.path`) so it shows even when the app is closed, and keep its data in a file next to it. Make it transparent, theme-aware, status-aware and sized to its content (1.5). No preview is fine too: the tile then shows nothing on hover.
 4. Panel apps: answer `POST /holster/open` fast, then slide your panel out. Window apps: be single-instance.
 5. Optional: `POST` an `activity` signal to Holster when something meaningful happens.
-6. Check your app in Holster's Settings, Apps: no error, no warnings, status "Running".
-7. Finish every round of changes with a new version and a release build, and tell the user the installer's full path (5).
+6. Optional: show a notification when something needs the user now (1.8), and hear back on `notify.url`.
+7. Check your app in Holster's Settings, Apps: no error, no warnings, status "Running".
+8. Finish every round of changes with a new version and a release build, and tell the user the installer's full path (5).
 
 ---
 
@@ -71,6 +72,7 @@ One manifest per app at `%APPDATA%\Holster\apps\<id>.json`. The file name **must
 | `open.mode` | yes | `"panel"` (needs `open.url`) or `"window"` (needs `launch`). |
 | `open.url` | panel | Holster `POST`s here to open your panel. |
 | `launch` | window; recommended for panel | `exe`: absolute path. `args`: list of strings. Holster starts it when the app isn't running. |
+| `notify.url` | no | Holster `POST`s here what happened to your notifications (1.8). |
 
 **Every URL must be `http://127.0.0.1[:port]/...`.** `localhost`, other hosts and `https` are rejected. A broken manifest never breaks Holster: it shows in Settings with the exact error (bad JSON, mismatched id, unknown icon, non-loopback URL, missing field). Warnings (missing exe, missing preview file, clamped size, panel without launch) show in amber.
 
@@ -181,17 +183,73 @@ Content-Type: application/json
 
 The tab glows in your app's color for about 2 s (or, while the dock is open, your tile pulses). During a fullscreen app the glow waits until the user is back. Send it when something meaningful happened that the user didn't do themselves (a model updated a project, a long job finished). Never on a timer.
 
-Other endpoints: `GET {api}/status` returns `{ "running": true, "version": "..." }`. `POST {api}/apps/<id>/reload` re-reads manifests (see 1.3).
+Other endpoints: `GET {api}/status` returns `{ "running": true, "version": "..." }`. `POST {api}/apps/<id>/reload` re-reads manifests (see 1.3). `POST {api}/apps/<id>/notify` shows a notification (1.8).
 
 Holster's API rejects requests whose `Host` isn't `127.0.0.1:<port>` or `localhost:<port>`, and browser requests from non-loopback origins.
 
-### 1.8 Security
+### 1.8 Notifications
+
+A notification is a small card that pops out of Holster's tab. The newest sits at the tab's height and older ones are pushed away from it; up to three show at once, and more wait their turn.
+
+```http
+POST {api}/apps/<id>/notify
+Content-Type: application/json
+
+{
+  "id": "meeting-42",
+  "title": "Meeting in 10 minutes",
+  "body": "Design review with the team",
+  "buttons": [
+    { "id": "snooze", "label": "Snooze" },
+    { "id": "join", "label": "Join", "primary": true }
+  ],
+  "timeout": 8
+}
+```
+
+Holster answers `{ "ok": true, "id": "meeting-42", "muted": false }`, or `400` with the exact `error`.
+
+| Field | Rules |
+|---|---|
+| `id` | Optional: your own id, 1–64 characters. Sending the same `id` again updates that notification in place (new content, its timer starts over). Without one, Holster makes one up and returns it. |
+| `title` | Required (unless `page`). Up to 120 characters; two lines show. |
+| `body` | Optional. Up to 500 characters; three lines show. |
+| `buttons` | Optional, at most 2: `id` (1–64 characters), `label` (up to 24), `primary` (the filled one: the main action). |
+| `timeout` | Seconds on screen: default 6, up to 3600. `0` stays until the user deals with it. |
+| `page` | Instead of title, body and buttons: `{ "url": "http://127.0.0.1:…", "width": 340, "height": 120 }` (width 200–480, height 48–480). Your own page in Holster's card. |
+
+How it behaves:
+
+- Holster draws the card in its own design language: your tile (icon in your color), your app's name, the title, the text and the buttons. Clicking the card opens your app the way the manifest says (a panel unfolds from the card's height); a button closes it; the `×` (on hover) or a flick into the edge dismisses it.
+- A timed notification only counts down while it's on screen, and waits while the cursor is on it. Notifications wait, timers included, while the dock or Settings is open (your tile pulses instead), during a fullscreen app (when the user hides Holster for those), while an app panel is on the edge, and during Do not disturb.
+- Nothing is stored: an expired notification is simply gone. Keep your own history if you need one.
+- The user can mute your app's notifications in Settings. Holster then answers `"muted": true` and shows nothing.
+- `DELETE {api}/apps/<id>/notify/<notification id>` takes one back (the meeting started, the job was cancelled). `404` if it's already gone.
+
+**Hearing back.** Add `"notify": { "url": "http://127.0.0.1:<port>/holster/notify" }` to your manifest and Holster `POST`s what happened:
+
+```json
+{ "id": "meeting-42", "event": "action", "button": "snooze" }
+```
+
+`event` is `clicked` (the card itself; your app is being opened), `action` (a button, with its `button` id), `dismissed` (the `×`, or flicked away) or `expired` (its time ran out). Nothing is sent when you take one back yourself. Answer fast: Holster doesn't wait for you or retry.
+
+**Custom pages** follow the preview rules (1.5): transparent, theme-aware (`?theme=` and `theme` messages), `color-scheme` matching the theme, no card or shadow of your own. Keep the top-right 32×32 px free: Holster draws the dismiss `×` there on hover. The page talks to Holster with `parent.postMessage(msg, "*")`:
+
+- `{ holster: "resize", width, height }`: a new size.
+- `{ holster: "action", button: "<id>" }`: closes the card and sends you `action` with that id.
+- `{ holster: "open" }`: like a click on a card Holster draws.
+- `{ holster: "close" }`: dismisses it.
+
+When to notify: something the user wants to know now and can act on (a meeting starting, a long job done, a reply they're waiting for). Not progress chatter, not promotions, never on a timer. For "something happened, look when you like", a signal (1.7) is calmer.
+
+### 1.9 Security
 
 - Everything Holster talks to is `127.0.0.1`. Serve Holster routes on a listener bound to `127.0.0.1` only.
 - **Holster routes must never be reachable through a public tunnel.** If your app also exposes itself (Tailscale Funnel, Cloudflare, ngrok), give the tunnel its own listener (or a gate that 404s everything else) and never route `/holster/*` there. A good pattern: the local listener serves everything; requests forwarded from the internet carry a marker header or arrive on a dedicated port, and get only the public routes.
 - Validate the `Host` header on loopback listeners (DNS-rebinding guard).
 
-### 1.9 Minimal server (Rust, axum)
+### 1.10 Minimal server (Rust, axum)
 
 ```rust
 use axum::{routing::{get, post}, Json, Router};
@@ -212,6 +270,11 @@ pub async fn serve_holster(app_handle: tauri::AppHandle) -> anyhow::Result<u16> 
                 let _ = h.run_on_main_thread(move || { /* slide the panel out, take focus */ let _ = (anchor_y, tab_y); });
                 Json(json!({ "ok": true }))
             }
+        }))
+        // What happened to a notification you sent (1.8).
+        .route("/holster/notify", post(|Json(e): Json<Value>| async move {
+            let _ = (&e["id"], &e["event"], &e["button"]); // e.g. snooze on "action"/"snooze"
+            "ok"
         }));
     tokio::spawn(async move { axum::serve(listener, router).await });
     write_manifest(port)?;
@@ -233,7 +296,8 @@ fn write_manifest(port: u16) -> anyhow::Result<()> {
         "preview": { "path": std::env::current_exe()?.with_file_name("holster-preview").join("index.html"),
                      "width": 300, "height": 180 },
         "open": { "mode": "panel", "url": format!("{base}/open") },
-        "launch": { "exe": std::env::current_exe()?, "args": [] }
+        "launch": { "exe": std::env::current_exe()?, "args": [] },
+        "notify": { "url": format!("{base}/notify") }
     });
     let text = serde_json::to_string_pretty(&manifest)?;
     let file = apps.join("my-app.json");
@@ -246,7 +310,7 @@ fn write_manifest(port: u16) -> anyhow::Result<()> {
 }
 ```
 
-`examples/hello-holster` in the Holster repo is a complete, dependency-free example: an on-disk live-clock preview that follows the running state and resizes itself at runtime, a std HTTP health route, `window` mode, and a Space-key signal.
+`examples/hello-holster` in the Holster repo is a complete, dependency-free example: an on-disk live-clock preview that follows the running state and resizes itself at runtime, a std HTTP health route, `window` mode, a Space-key signal, and notifications (`N` for one that goes away by itself, `Shift+N` for one that stays; Snooze really snoozes).
 
 ---
 

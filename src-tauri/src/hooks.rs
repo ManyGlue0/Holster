@@ -24,7 +24,8 @@ struct Ctx {
 }
 
 static CTX: OnceLock<Ctx> = OnceLock::new();
-static OWN: [AtomicIsize; 3] = [AtomicIsize::new(0), AtomicIsize::new(0), AtomicIsize::new(0)];
+const OWN_COUNT: usize = 3 + crate::shell::NOTE_SLOTS;
+static OWN: [AtomicIsize; OWN_COUNT] = [const { AtomicIsize::new(0) }; OWN_COUNT];
 static MOUSE: AtomicIsize = AtomicIsize::new(0);
 static KEYS: AtomicIsize = AtomicIsize::new(0);
 static SWALLOW_ESC_UP: AtomicBool = AtomicBool::new(false);
@@ -34,7 +35,7 @@ const WM_INSTALL: u32 = WM_APP + 1;
 const WM_REMOVE: u32 = WM_APP + 2;
 
 /// Starts the hook thread. `own` are Holster's top-level windows.
-pub fn start(own: [isize; 3], outside_click: impl Fn() + Send + Sync + 'static, escape: impl Fn() + Send + Sync + 'static) {
+pub fn start(own: [isize; OWN_COUNT], outside_click: impl Fn() + Send + Sync + 'static, escape: impl Fn() + Send + Sync + 'static) {
     for (slot, h) in OWN.iter().zip(own) {
         slot.store(h, Ordering::SeqCst);
     }

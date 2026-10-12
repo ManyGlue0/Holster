@@ -1,12 +1,13 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
-import { api, on, type AppView, type PreviewState, type Settings, type ShellState } from "./lib/api";
+import { api, on, type AppView, type NoteSlot, type PreviewState, type Settings, type ShellState } from "./lib/api";
 import { loadIcons } from "./lib/icons";
 import { useDark, useStore } from "./lib/store";
 import { MainWindow } from "./components/MainWindow";
 import { GearWindow } from "./components/GearWindow";
 import { PreviewWindow } from "./components/PreviewWindow";
+import { NoteWindow } from "./components/NoteWindow";
 
 const label = getCurrentWindow().label;
 
@@ -17,7 +18,7 @@ function retry(fn: () => Promise<unknown>, attempt = 0) {
 }
 document.documentElement.dataset.window = label;
 
-/** One bundle, three windows: each renders its own surface over shared state. */
+/** One bundle, every window: each renders its own surface over shared state. */
 export default function App() {
   const dark = useDark();
 
@@ -27,6 +28,7 @@ export default function App() {
     // retry the first reads until it answers.
     retry(() => api.shellState().then(s.setShell));
     retry(() => api.previewState().then((preview) => useStore.setState({ preview })));
+    retry(() => api.noteSlots().then((notes) => useStore.setState({ notes })));
     retry(s.loadSettings);
     retry(s.refreshApps);
     // Warm the icon set after first paint; the tab doesn't need it.
@@ -41,6 +43,7 @@ export default function App() {
       on<PreviewState>("preview", (preview) => useStore.setState({ preview })),
       on<AppView[]>("apps", (apps) => useStore.setState({ apps, appsLoaded: true })),
       on<Settings>("settings", (settings) => useStore.setState({ settings })),
+      on<(NoteSlot | null)[]>("notes", (notes) => useStore.setState({ notes })),
     ];
     return () => {
       offs.forEach((off) => off());
@@ -63,5 +66,6 @@ export default function App() {
 
   if (label === "gear") return <GearWindow />;
   if (label === "preview") return <PreviewWindow />;
+  if (label.startsWith("notify-")) return <NoteWindow slot={Number(label.slice(7))} />;
   return <MainWindow />;
 }

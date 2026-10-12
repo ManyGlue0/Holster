@@ -4,6 +4,7 @@ mod commands;
 mod fullscreen;
 mod health;
 mod hooks;
+mod notify;
 mod process;
 mod settings;
 mod shell;
@@ -12,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, RwLock};
 
 use serde_json::json;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Theme, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::ManagerExt as _;
@@ -20,10 +21,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::apps::Registry;
 use crate::health::Health;
+use crate::notify::Notifier;
 use crate::settings::{Prefs, Settings, SettingsStore};
 use crate::shell::Shell;
 
-pub const WINDOWS: [&str; 3] = ["main", "gear", "preview"];
+pub const WINDOWS: [&str; 6] = ["main", "gear", "preview", "notify-0", "notify-1", "notify-2"];
 
 pub struct Core {
     pub app: AppHandle,
@@ -33,11 +35,16 @@ pub struct Core {
     pub data_dir: PathBuf,
     pub port: RwLock<u16>,
     shell: OnceLock<Arc<Shell>>,
+    notifier: OnceLock<Arc<Notifier>>,
 }
 
 impl Core {
     pub fn shell(&self) -> &Arc<Shell> {
         self.shell.get().expect("shell installed")
+    }
+
+    pub fn notifier(&self) -> &Arc<Notifier> {
+        self.notifier.get().expect("notifier installed")
     }
 
     /// Apps were added, removed, reordered, hidden or changed status.
@@ -60,8 +67,16 @@ impl Core {
         if before.hide_in_fullscreen != after.hide_in_fullscreen {
             fullscreen::recheck();
         }
-        if before.order != after.order || before.hidden != after.hidden {
+        if before.order != after.order || before.hidden != after.hidden || before.muted != after.muted {
             self.apps_changed(app);
+        }
+        if before.do_not_disturb != after.do_not_disturb || before.muted != after.muted {
+            if let Some(n) = self.notifier.get() {
+                n.settings_changed();
+            }
+        }
+        if let Some(item) = DND_ITEM.get() {
+            let _ = item.set_checked(after.do_not_disturb);
         }
         let _ = app.emit("settings", after);
     }
@@ -142,11 +157,25 @@ fn with_shell(app: &AppHandle, f: impl FnOnce(&Arc<Shell>)) {
     }
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+/// The tray's Do not disturb item, kept in sync with Settings.
+static DND_ITEM: OnceLock<CheckMenuItem<tauri::Wry>> = OnceLock::new();
+
+fn set_do_not_disturb(app: &AppHandle, on: bool) {
+    if let Some(core) = app.try_state::<Arc<Core>>() {
+        let before = core.prefs.get();
+        let after = core.prefs.update(|s| s.do_not_disturb = on);
+        core.apply_settings_change(app, &before, &after);
+    }
+}
+
+fn build_tray(app: &AppHandle, dnd: bool) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open dock", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let quiet = CheckMenuItem::with_id(app, "dnd", "Do not disturb", true, dnd, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Holster", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &settings, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let sep = || PredefinedMenuItem::separator(app);
+    let menu = Menu::with_items(app, &[&open, &settings, &sep()?, &quiet, &sep()?, &quit])?;
+    let _ = DND_ITEM.set(quiet);
     TrayIconBuilder::with_id("holster")
         .icon(app.default_window_icon().cloned().expect("app icon"))
         .tooltip("Holster")
@@ -155,6 +184,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => with_shell(app, |s| s.open_dock()),
             "settings" => with_shell(app, |s| s.open_panel()),
+            "dnd" => {
+                let on = app.try_state::<Arc<Core>>().is_some_and(|c| !c.prefs.get().do_not_disturb);
+                set_do_not_disturb(app, on);
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -167,8 +200,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// The settings card and the preview card: the same frameless, transparent,
-/// always-on-top shell as the main window, created hidden.
+/// The settings, preview and notification cards: the same frameless,
+/// transparent, always-on-top shell as the main window, created hidden.
 fn build_card_window(app: &AppHandle, label: &str) -> tauri::Result<tauri::WebviewWindow> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("Holster")
@@ -205,8 +238,9 @@ pub fn run() {
             let prefs = Arc::new(Prefs::new(SettingsStore::new(&data_dir)));
             let settings = prefs.get();
 
-            build_card_window(&handle, "gear")?;
-            build_card_window(&handle, "preview")?;
+            for label in &WINDOWS[1..] {
+                build_card_window(&handle, label)?;
+            }
 
             let reg_handle = handle.clone();
             let reg = Registry::new(data_dir.join("apps"), move || {
@@ -224,6 +258,7 @@ pub fn run() {
                 data_dir: data_dir.clone(),
                 port: RwLock::new(0),
                 shell: OnceLock::new(),
+                notifier: OnceLock::new(),
             });
             app.manage(core.clone());
 
@@ -231,6 +266,8 @@ pub fn run() {
             apply_theme(&handle, &settings.theme);
             let shell = Shell::install(&handle, prefs.clone(), reg.clone(), health.clone());
             let _ = core.shell.set(shell.clone());
+            let notifier = Notifier::new(handle.clone(), shell.clone(), reg.clone(), prefs.clone(), health.clone());
+            let _ = core.notifier.set(notifier.clone());
             {
                 let (a, b) = (shell.clone(), shell.clone());
                 hooks::start(shell.hwnds(), move || a.on_outside_click(), move || {
@@ -261,7 +298,7 @@ pub fn run() {
                 eprintln!("{e}");
             }
             sync_autostart(&handle, settings.launch_at_startup);
-            build_tray(&handle)?;
+            build_tray(&handle, settings.do_not_disturb)?;
 
             // The local API for apps, and the discovery file that points at it.
             let api_core = core.clone();
@@ -270,7 +307,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let version = signal_handle.package_info().version.to_string();
                 let emit = signal_handle.clone();
-                let result = api::start(api_core.data_dir.clone(), version, signal_reg.clone(), move |id| {
+                let result = api::start(api_core.data_dir.clone(), version, signal_reg.clone(), notifier, move |id| {
                     if let Some(m) = signal_reg.manifest(id) {
                         let _ = emit.emit_to("main", "signal", json!({ "id": id, "color": m.color }));
                     }
@@ -309,6 +346,14 @@ pub fn run() {
             commands::update_settings,
             commands::reset_tab_position,
             commands::app_info,
+            commands::note_slots,
+            commands::note_measured,
+            commands::note_resize,
+            commands::note_hover,
+            commands::note_drag,
+            commands::note_action,
+            commands::note_dismiss,
+            commands::note_open,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Holster");

@@ -5,7 +5,10 @@
 //! - Serves `/holster/health` on loopback, so Holster knows when it runs.
 //! - Writes its manifest to `%APPDATA%\Holster\apps\hello-holster.json` on start.
 //! - Opens in `window` mode: a small native window. Press Space in it to send
-//!   Holster an activity signal (the tab glows mint).
+//!   Holster an activity signal (the tab glows mint), N for a notification
+//!   that goes away by itself, Shift+N for one that stays.
+//! - Hears what happened to its notifications on `/holster/notify`, and
+//!   snoozes for real: Snooze sends the notification again 10 seconds later.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -13,6 +16,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicIsize, AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use windows_sys::Win32::Foundation::*;
@@ -21,7 +25,7 @@ use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_SPACE;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_SHIFT, VK_SPACE};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 const ID: &str = "hello-holster";
@@ -33,6 +37,8 @@ static HWND_MAIN: AtomicIsize = AtomicIsize::new(0);
 /// When the last ping was sent (ms since epoch) and whether Holster answered.
 static PINGED_AT: AtomicU64 = AtomicU64::new(0);
 static PING_OK: AtomicIsize = AtomicIsize::new(0);
+/// What Holster last reported about a notification, shown in the window.
+static LAST_EVENT: Mutex<String> = Mutex::new(String::new());
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -72,12 +78,29 @@ fn serve(listener: TcpListener) {
                     break;
                 }
             }
-            let req = String::from_utf8_lossy(&buf[..n]);
+            let head_end = buf[..n].windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4).unwrap_or(n);
+            let req = String::from_utf8_lossy(&buf[..head_end]).to_string();
+            let length = req
+                .lines()
+                .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                .unwrap_or(0)
+                .min(buf.len() - head_end);
+            while n < head_end + length {
+                match (&stream).read(&mut buf[n..head_end + length]) {
+                    Ok(0) | Err(_) => break,
+                    Ok(k) => n += k,
+                }
+            }
+            let body = String::from_utf8_lossy(&buf[head_end..n]).to_string();
             let mut parts = req.lines().next().unwrap_or("").split_whitespace();
             let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             let path = target.split('?').next().unwrap_or("");
             match (method, path) {
                 ("GET", "/holster/health") => respond(stream, "200 OK", "text/plain", b"ok"),
+                ("POST", "/holster/notify") => {
+                    respond(stream, "200 OK", "application/json", br#"{"ok":true}"#);
+                    on_notify_event(&body);
+                }
                 _ => respond(stream, "404 Not Found", "text/plain", b"Not found"),
             }
         });
@@ -150,7 +173,8 @@ fn write_manifest(port: u16, preview: Option<PathBuf>) {
   "health": "{base}/health",
   "preview": {{ "path": {preview}, "width": 260, "height": 132 }},
   "open": {{ "mode": "window" }},
-  "launch": {{ "exe": {exe}, "args": [] }}
+  "launch": {{ "exe": {exe}, "args": [] }},
+  "notify": {{ "url": "{base}/notify" }}
 }}
 "##,
         exe = json_str(&exe),
@@ -160,8 +184,13 @@ fn write_manifest(port: u16, preview: Option<PathBuf>) {
     write_if_changed(&apps.join(format!("{ID}.json")), &manifest);
 }
 
-/// POSTs an activity signal to Holster (discovered via holster.json).
+/// POSTs an activity signal to Holster.
 fn ping_holster() -> bool {
+    holster_post(&format!("/apps/{ID}/signal"), r#"{"kind":"activity"}"#)
+}
+
+/// POSTs JSON to Holster's API (discovered via holster.json). True on 200.
+fn holster_post(path: &str, body: &str) -> bool {
     let Some(text) = holster_dir().and_then(|d| std::fs::read_to_string(d.join("holster.json")).ok()) else { return false };
     let port = text
         .split("\"port\"")
@@ -172,9 +201,8 @@ fn ping_holster() -> bool {
     let Ok(mut s) = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(500)) else {
         return false;
     };
-    let body = r#"{"kind":"activity"}"#;
     let req = format!(
-        "POST /apps/{ID}/signal HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
@@ -184,6 +212,52 @@ fn ping_holster() -> bool {
     let mut resp = [0u8; 64];
     let n = s.read(&mut resp).unwrap_or(0);
     String::from_utf8_lossy(&resp[..n]).starts_with("HTTP/1.1 200")
+}
+
+// ---- notifications ------------------------------------------------------------------------
+
+/// Asks Holster for a notification: one that goes away by itself after 8
+/// seconds, or (`stays`) one that waits to be dismissed.
+fn notify(stays: bool) -> bool {
+    let (h, m, s) = chrono_local();
+    let body = if stays {
+        r#"{"id":"hello-stays","title":"This one stays","body":"Until you press a button, click the x, or flick it into the edge.","buttons":[{"id":"done","label":"Got it","primary":true}],"timeout":0}"#.to_string()
+    } else {
+        format!(
+            r#"{{"id":"hello","title":"Hello from Hello Holster","body":"It's {h:02}:{m:02}:{s:02}. This one goes away by itself in 8 seconds.","buttons":[{{"id":"snooze","label":"Snooze"}},{{"id":"done","label":"Done","primary":true}}],"timeout":8}}"#
+        )
+    };
+    holster_post(&format!("/apps/{ID}/notify"), &body)
+}
+
+/// A string field from a small JSON object, without pulling in serde.
+fn field<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let rest = json.split(&format!("\"{key}\"")).nth(1)?;
+    let rest = rest.trim_start().strip_prefix(':')?.trim_start().strip_prefix('"')?;
+    rest.split('"').next()
+}
+
+/// Holster reports what happened to a notification: `clicked`, `action`
+/// (with `button`), `dismissed` or `expired`.
+fn on_notify_event(body: &str) {
+    let event = field(body, "event").unwrap_or("?");
+    let line = match (event, field(body, "button")) {
+        ("action", Some("snooze")) => {
+            std::thread::spawn(|| {
+                std::thread::sleep(Duration::from_secs(10));
+                notify(false);
+            });
+            "Snoozed: it comes back in 10 seconds.".to_string()
+        }
+        ("action", Some(b)) => format!("You pressed {b}."),
+        ("clicked", _) => "You clicked the notification.".to_string(),
+        ("dismissed", _) => "You dismissed it.".to_string(),
+        ("expired", _) => "It went away by itself.".to_string(),
+        (e, _) => format!("Holster says: {e}"),
+    };
+    *LAST_EVENT.lock().unwrap() = line;
+    let h = HWND_MAIN.load(Ordering::SeqCst) as HWND;
+    unsafe { InvalidateRect(h, std::ptr::null(), 0) };
 }
 
 // ---- window -------------------------------------------------------------------------------
@@ -271,14 +345,21 @@ unsafe fn paint(hwnd: HWND) {
     text(mem, "Opened from Holster. This is the window open mode.", &mut r, DT_LEFT | DT_TOP | DT_WORDBREAK);
 
     let since = now_ms().saturating_sub(PINGED_AT.load(Ordering::SeqCst));
-    let hint = if since < 2500 {
-        if PING_OK.load(Ordering::SeqCst) == 1 { "Pinged Holster: watch the tab glow." } else { "Holster isn't running." }
+    let last = LAST_EVENT.lock().unwrap().clone();
+    let (hint, lit) = if since < 2500 {
+        if PING_OK.load(Ordering::SeqCst) == 1 {
+            ("Sent: watch the edge of your screen.".to_string(), true)
+        } else {
+            ("Holster isn't running.".to_string(), true)
+        }
+    } else if !last.is_empty() {
+        (last, true)
     } else {
-        "Press Space to send Holster an activity signal."
+        ("Space: activity signal.  N: notification.  Shift+N: one that stays.".to_string(), false)
     };
     let mut r = RECT { left: pad, top: h - px(46.0), right: w - pad, bottom: h };
-    SetTextColor(mem, if since < 2500 { accent } else { fg3 });
-    text(mem, hint, &mut r, DT_LEFT | DT_TOP | DT_SINGLELINE);
+    SetTextColor(mem, if lit { accent } else { fg3 });
+    text(mem, &hint, &mut r, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
     BitBlt(dc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
     SelectObject(mem, old_bmp);
@@ -316,9 +397,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             InvalidateRect(hwnd, std::ptr::null(), 0);
             0
         }
-        WM_KEYDOWN if wparam as u16 == VK_SPACE => {
-            std::thread::spawn(|| {
-                let ok = ping_holster();
+        WM_KEYDOWN if wparam as u16 == VK_SPACE || wparam == 'N' as usize => {
+            let key = wparam;
+            let stays = GetKeyState(VK_SHIFT as i32) < 0;
+            std::thread::spawn(move || {
+                let ok = if key == 'N' as usize { notify(stays) } else { ping_holster() };
                 PING_OK.store(ok as isize, Ordering::SeqCst);
                 PINGED_AT.store(now_ms(), Ordering::SeqCst);
                 let h = HWND_MAIN.load(Ordering::SeqCst) as HWND;

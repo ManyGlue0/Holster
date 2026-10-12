@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::apps::{self, AppView, OpenMode, Status};
+use crate::notify::{Content, Request, SlotView};
 use crate::process;
 use crate::settings::Settings;
 use crate::shell::{PreviewState, ShellState};
@@ -294,4 +295,70 @@ pub async fn app_info(app: AppHandle, core: C<'_>) -> Res<Value> {
         "port": *core.port.read().unwrap(),
         "hotkeyError": crate::hotkey_error(),
     }))
+}
+
+// ---- notifications ---------------------------------------------------------------
+
+#[tauri::command]
+pub async fn note_slots(core: C<'_>) -> Res<Vec<Option<SlotView>>> {
+    Ok(core.notifier().slots())
+}
+
+/// A text card's drawn height (CSS px).
+#[tauri::command]
+pub async fn note_measured(core: C<'_>, key: u64, height: f64) -> Res<()> {
+    core.notifier().measured(key, height);
+    Ok(())
+}
+
+/// A page card asked for a new size.
+#[tauri::command]
+pub async fn note_resize(core: C<'_>, key: u64, width: f64, height: f64) -> Res<()> {
+    core.notifier().resize(key, width, height);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_hover(core: C<'_>, key: u64, on: bool) -> Res<()> {
+    core.notifier().hover(key, on);
+    Ok(())
+}
+
+/// Flicking a card into the edge: "move" with the distance, then "end".
+#[tauri::command]
+pub async fn note_drag(core: C<'_>, key: u64, phase: String, dx: f64) -> Res<()> {
+    core.notifier().drag(key, &phase, dx);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_action(core: C<'_>, key: u64, button: String) -> Res<()> {
+    core.notifier().action(key, &button);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_dismiss(core: C<'_>, key: u64) -> Res<()> {
+    core.notifier().dismiss(key);
+    Ok(())
+}
+
+/// The card was clicked: it closes and its app opens the way the manifest
+/// says, its panel unfolding from the card's height. If that fails, the
+/// reason comes back as a notification.
+#[tauri::command]
+pub async fn note_open(core: C<'_>, key: u64) -> Res<()> {
+    let Some((id, cy)) = core.notifier().clicked(key) else { return Ok(()) };
+    let shell = core.shell().clone();
+    match open_app_inner(&core, &id, cy, shell.tab_y()).await {
+        Ok(Some(pids)) => shell.cover_with(pids),
+        Ok(None) => {}
+        Err(e) => {
+            let name = core.reg.manifest(&id).map(|m| m.name).unwrap_or(id.clone());
+            let content = Content::Text { title: format!("{name} didn't open"), body: Some(e), buttons: Vec::new() };
+            core.notifier().post(&id, Request { id: None, content, timeout: Some(Duration::from_secs(6)) });
+        }
+    }
+    core.health.poke();
+    Ok(())
 }

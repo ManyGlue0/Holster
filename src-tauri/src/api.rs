@@ -4,6 +4,8 @@
 //! - `GET  /status`            `{ "running": true, "version": "..." }`
 //! - `POST /apps/{id}/signal`  `{ "kind": "activity" }` tints the tab in the app's color
 //! - `POST /apps/{id}/reload`  re-reads the manifests, answers with this app's result
+//! - `POST /apps/{id}/notify`  shows (or, same `id`, updates) a notification (see notify.rs)
+//! - `DELETE /apps/{id}/notify/{nid}` takes a notification back
 //! - `GET  /apps/{id}/preview/{file}` serves the app's on-disk preview folder
 //!
 //! Requests must name the loopback host (DNS-rebinding guard) and may only
@@ -17,13 +19,14 @@ use axum::{
     http::{header, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::apps::Registry;
+use crate::notify::{self, Notifier};
 
 type SignalFn = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -32,6 +35,7 @@ struct Ctx {
     port: u16,
     version: String,
     reg: Arc<Registry>,
+    notifier: Arc<Notifier>,
     signal: SignalFn,
 }
 
@@ -102,6 +106,35 @@ async fn reload(State(c): State<Ctx>, UrlPath(id): UrlPath<String>) -> Response 
     }
 }
 
+fn bad_request(error: String) -> Response {
+    (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": error }))).into_response()
+}
+
+async fn notify(State(c): State<Ctx>, UrlPath(id): UrlPath<String>, body: axum::body::Bytes) -> Response {
+    let Ok(body) = serde_json::from_slice::<Value>(&body) else {
+        return bad_request("The body must be JSON".into());
+    };
+    let req = match notify::parse_request(&body) {
+        Ok(r) => r,
+        Err(e) => return bad_request(e),
+    };
+    if c.reg.manifest(&id).is_none() {
+        return unknown(&id);
+    }
+    let posted = c.notifier.post(&id, req);
+    Json(json!({ "ok": true, "id": posted.id, "muted": posted.muted })).into_response()
+}
+
+async fn withdraw(State(c): State<Ctx>, UrlPath((id, nid)): UrlPath<(String, String)>) -> Response {
+    let Some(nid) = decode(&nid) else { return bad_request("Bad notification id".into()) };
+    if c.notifier.withdraw(&id, &nid) {
+        Json(json!({ "ok": true })).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, Json(json!({ "ok": false, "error": format!("No notification \"{nid}\" from \"{id}\"") })))
+            .into_response()
+    }
+}
+
 fn content_type(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
         Some("html" | "htm") => "text/html; charset=utf-8",
@@ -167,14 +200,22 @@ pub fn discovery_path(dir: &Path) -> PathBuf {
 }
 
 /// Binds a random loopback port, writes the discovery file and serves.
-pub async fn start(dir: PathBuf, version: String, reg: Arc<Registry>, on_signal: impl Fn(&str) + Send + Sync + 'static) -> anyhow::Result<u16> {
+pub async fn start(
+    dir: PathBuf,
+    version: String,
+    reg: Arc<Registry>,
+    notifier: Arc<Notifier>,
+    on_signal: impl Fn(&str) + Send + Sync + 'static,
+) -> anyhow::Result<u16> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
     let port = listener.local_addr()?.port();
-    let ctx = Ctx { port, version: version.clone(), reg, signal: Arc::new(on_signal) };
+    let ctx = Ctx { port, version: version.clone(), reg, notifier, signal: Arc::new(on_signal) };
     let router = Router::new()
         .route("/status", get(status))
         .route("/apps/{id}/signal", post(signal))
         .route("/apps/{id}/reload", post(reload))
+        .route("/apps/{id}/notify", post(notify))
+        .route("/apps/{id}/notify/{nid}", delete(withdraw))
         .route("/apps/{id}/preview/{*file}", get(preview_file))
         .fallback(|| async { (StatusCode::NOT_FOUND, "Not found") })
         .layer(middleware::from_fn_with_state(ctx.clone(), guard))

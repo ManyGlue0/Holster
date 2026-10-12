@@ -66,6 +66,8 @@ pub struct Manifest {
     pub mode: OpenMode,
     pub open_url: Option<String>,
     pub launch: Option<Launch>,
+    /// Where Holster reports what happened to the app's notifications.
+    pub notify_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -111,6 +113,8 @@ pub struct AppView {
     pub error: Option<String>,
     pub warnings: Vec<String>,
     pub hidden: bool,
+    /// Its notifications are dropped (Settings).
+    pub muted: bool,
 }
 
 // ---- validation ---------------------------------------------------------------------
@@ -338,7 +342,18 @@ pub fn parse(text: &str, stem: &str) -> (Result<Manifest, String>, Vec<String>) 
             None => return Err("open.mode is missing".into()),
         };
 
-        Ok(Manifest { id, name, icon, color, health, preview, mode, open_url, launch })
+        let notify_url = match v.get("notify") {
+            None | Some(Value::Null) => None,
+            Some(n) => {
+                let url = str_field(n, "url", "notify.")?.ok_or("notify.url is missing")?;
+                if !loopback_url(url) {
+                    return Err("notify.url must be an http://127.0.0.1 URL".into());
+                }
+                Some(url.to_string())
+            }
+        };
+
+        Ok(Manifest { id, name, icon, color, health, preview, mode, open_url, launch, notify_url })
     })();
     (r, warnings)
 }
@@ -494,6 +509,7 @@ impl Registry {
             .iter()
             .map(|e| {
                 let hidden = settings.hidden.contains(&e.id);
+                let muted = settings.muted.contains(&e.id);
                 match &e.manifest {
                     Ok(m) => AppView {
                         id: e.id.clone(),
@@ -526,6 +542,7 @@ impl Registry {
                         error: None,
                         warnings: e.warnings.clone(),
                         hidden,
+                        muted,
                     },
                     Err(err) => AppView {
                         id: e.id.clone(),
@@ -545,6 +562,7 @@ impl Registry {
                         error: Some(err.clone()),
                         warnings: Vec::new(),
                         hidden,
+                        muted,
                     },
                 }
             })
@@ -675,6 +693,15 @@ mod tests {
         assert!(parse(&bad, "notes").0.unwrap_err().contains("open.url"));
         let bad = GOOD.replace("notebook-pen", "not-an-icon");
         assert!(parse(&bad, "notes").0.is_err());
+    }
+
+    #[test]
+    fn notify_url_is_optional_and_loopback() {
+        assert_eq!(parse(GOOD, "notes").0.unwrap().notify_url, None);
+        let with = GOOD.replace(r#""launch""#, r#""notify": { "url": "http://127.0.0.1:47321/holster/notify" }, "launch""#);
+        assert_eq!(parse(&with, "notes").0.unwrap().notify_url.as_deref(), Some("http://127.0.0.1:47321/holster/notify"));
+        let bad = with.replace("http://127.0.0.1:47321/holster/notify", "http://example.com/notify");
+        assert!(parse(&bad, "notes").0.unwrap_err().contains("notify.url"));
     }
 
     #[test]

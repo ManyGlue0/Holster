@@ -27,6 +27,12 @@ pub struct Settings {
     pub order: Vec<String>,
     /// App ids hidden from the dock (still listed in Settings).
     pub hidden: Vec<String>,
+    /// App ids whose notifications are dropped.
+    pub muted: Vec<String>,
+    /// Notifications wait (like during a fullscreen app) until this is off.
+    pub do_not_disturb: bool,
+    /// A soft system sound when a notification pops out.
+    pub notify_sound: bool,
     pub delays: Delays,
 }
 
@@ -60,6 +66,9 @@ impl Default for Settings {
             tab: TabSettings::default(),
             order: Vec::new(),
             hidden: Vec::new(),
+            muted: Vec::new(),
+            do_not_disturb: false,
+            notify_sound: false,
             delays: Delays::default(),
         }
     }

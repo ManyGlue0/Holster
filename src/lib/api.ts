@@ -12,6 +12,10 @@ export interface Settings {
   tab: { yFrac: number };
   order: string[];
   hidden: string[];
+  /** Apps whose notifications are dropped. */
+  muted: string[];
+  doNotDisturb: boolean;
+  notifySound: boolean;
   delays: { dock: number; preview: number; previewGrace: number };
 }
 
@@ -70,6 +74,27 @@ export interface AppView {
   error: string | null;
   warnings: string[];
   hidden: boolean;
+  muted: boolean;
+}
+
+export interface NoteButton {
+  id: string;
+  label: string;
+  primary: boolean;
+}
+
+export type NoteContent =
+  | { kind: "text"; title: string; body: string | null; buttons: NoteButton[] }
+  | { kind: "page"; url: string; width: number; height: number };
+
+/** What one notification window shows. */
+export interface NoteSlot {
+  key: number;
+  appId: string;
+  content: NoteContent;
+  timed: boolean;
+  /** Content visible: false while it's measured, or folding away. */
+  shown: boolean;
 }
 
 export interface AppInfo {
@@ -108,6 +133,15 @@ export const api = {
   updateSettings: (patch: DeepPartial<Settings>) => invoke<Settings>("update_settings", { patch }),
   resetTabPosition: () => invoke("reset_tab_position"),
   appInfo: () => invoke<AppInfo>("app_info"),
+
+  noteSlots: () => invoke<(NoteSlot | null)[]>("note_slots"),
+  noteMeasured: (key: number, height: number) => invoke("note_measured", { key, height }),
+  noteResize: (key: number, width: number, height: number) => invoke("note_resize", { key, width, height }),
+  noteHover: (key: number, on: boolean) => invoke("note_hover", { key, on }),
+  noteDrag: (key: number, phase: "move" | "end", dx: number) => invoke("note_drag", { key, phase, dx }),
+  noteAction: (key: number, button: string) => invoke("note_action", { key, button }),
+  noteDismiss: (key: number) => invoke("note_dismiss", { key }),
+  noteOpen: (key: number) => invoke("note_open", { key }),
 
   /** The preview window tells the dock whether the cursor is over it. */
   previewHover: (on: boolean) => emitTo("main", "preview-hover", on),

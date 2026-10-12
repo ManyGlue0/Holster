@@ -37,6 +37,7 @@ Holster is **only the frame**. Every app in it decides its own icon, its color, 
 - **Previews without opening anything.** Hover a tile and the app's preview slides out like a drawer. Previews can be pages on disk, so they show even when the app isn't running. Moving between tiles crossfades, never reloads.
 - **Never steals your focus.** The dock opens on hover without taking the keyboard from what you're typing in. Only a click outside, `Esc`, the shortcut, or opening an app closes it, so a stray mouse move can't make it vanish.
 - **Apps take the edge.** When an app opens its own side panel, the dock folds into the edge and the tab steps aside until the panel closes.
+- **Notifications.** A small card pops out of the tab with the app's own title, text and buttons (or its own page), and folds back when you're done. Newest at the tab, up to three at once. Timed or sticky, paused while you hover it, flicked away into the edge. Mute an app, or turn on Do not disturb.
 - **Ambient signals.** An app can say "something happened" and the tab glows in its color, or its tile pulses while the dock is open.
 - **Game mode.** While a fullscreen app is in front, the tab tucks away and never takes focus. Glows wait until you're back.
 - **Native all the way down.** Real acrylic, Windows 11 corners and hit-testing on every frame, spring animations paced by the compositor, light and dark themes.
@@ -97,7 +98,8 @@ To run Holster straight from the source without installing it, see [Development]
 - **Open an app**: click its tile. Apps that aren't running are started, with a spinner tracing the tile until they answer.
 - **More than five apps**: scroll the column with the wheel. It moves one tile at a time, with soft fades where more apps are hidden.
 - **Move it**: drag the tab, or the dock's grip, up or down.
-- **Settings**: the gear card below the dock, or the tray icon. Reorder apps by dragging, hide them, remove them, or add a manifest by hand. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, and hover timing.
+- **Settings**: the gear card below the dock, or the tray icon. Reorder apps by dragging, hide them, mute their notifications (the bell), remove them, or add a manifest by hand. Theme (System, Light, Dark), shortcut, launch at startup, hiding during fullscreen apps, Do not disturb (also in the tray menu), notification sound, and hover timing.
+- **Notifications**: click one to open its app, press its buttons, or flick it back into the edge (the `×` on hover works too). Resting the cursor on a card keeps it there.
 
 <br clear="right">
 
@@ -123,9 +125,10 @@ An app joins Holster by writing a manifest to `%APPDATA%\Holster\apps\<id>.json`
 - **Color**: a palette name (`mint`, `peach`, `lavender`, `sky`, `butter`, `rose`, `sage`, `lilac`, `apricot`, `mist`) or any hex color.
 - **Preview**: a page on disk (served by Holster, so it works while your app is closed), a live page from your running app, or both.
 - **Open**: `panel` (Holster calls your `open.url` and you slide out your own panel) or `window` (Holster starts or focuses your exe).
+- **Notify** (optional): `notify.url` hears what happened to your notifications (a button, a click, dismissed, expired).
 - Every URL must be `http://127.0.0.1`. Holster talks to nothing else.
 
-**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io) (the open `SKILL.md` format), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
+**The full contract is in one file: [`skill/holster-app/SKILL.md`](skill/holster-app/SKILL.md).** It covers registration, preview pages, opening, signals, notifications, security, a minimal server, the recommended stack, the design language with exact values (tokens, palette, material, geometry, springs), and how to ship each build (a new version every time, and the installer's path at the end). It is written as an [Agent Skill](https://agentskills.io) (the open `SKILL.md` format), so you can hand it to a coding agent and ask it to make your app Holster-ready, or simply read it.
 
 Install it into your agent (Claude Code, Codex, Cursor and many more) with one command, using the [skills](https://skills.sh) CLI:
 
@@ -135,7 +138,7 @@ npx skills add https://github.com/ManyGlue0/Holster/skill/holster-app
 
 Then ask your agent something like *"make this app show up in Holster"*.
 
-[`examples/hello-holster`](examples/hello-holster) is the smallest complete app: a live clock preview on disk (with a runtime resize), `window` open mode, and an activity signal when you press `Space`. Run it with `pnpm hello` while Holster is running.
+[`examples/hello-holster`](examples/hello-holster) is the smallest complete app: a live clock preview on disk (with a runtime resize), `window` open mode, an activity signal when you press `Space`, and notifications with `N` (timed, with a Snooze that really snoozes) and `Shift+N` (stays). Run it with `pnpm hello` while Holster is running.
 
 ### Local API
 
@@ -146,6 +149,8 @@ Holster listens on a random loopback port and writes it to `%APPDATA%\Holster\ho
 | `GET /status` | `{ "running": true, "version": "x.y.z" }` |
 | `POST /apps/{id}/signal` | body `{ "kind": "activity" }`: the tab glows in the app's color |
 | `POST /apps/{id}/reload` | re-reads the manifests and answers with that app's validation result |
+| `POST /apps/{id}/notify` | body `{ "title", "body", "buttons", "timeout" }` (or a `page`): shows a notification; same `id` updates it |
+| `DELETE /apps/{id}/notify/{nid}` | takes a notification back |
 | `GET /apps/{id}/preview/{file}` | serves an app's on-disk preview folder, so previews work while the app is closed |
 
 Requests must name the loopback host (a DNS-rebinding guard), and browser requests must come from loopback origins. Sending a signal from PowerShell:
@@ -157,15 +162,15 @@ Invoke-RestMethod -Method Post "$($holster.api)/apps/notes/signal" -ContentType 
 
 ## Your data
 
-Everything lives in `%APPDATA%\Holster\`: `settings.json` (theme, shortcut, dock order, hidden apps, tab position, hover timing), `apps\` (one manifest per app) and `holster.json` (only while Holster runs). Dock order and visibility belong to you and live in settings, never in the manifests, so an app rewriting its manifest can't undo your arrangement.
+Everything lives in `%APPDATA%\Holster\`: `settings.json` (theme, shortcut, dock order, hidden and muted apps, Do not disturb, tab position, hover timing), `apps\` (one manifest per app) and `holster.json` (only while Holster runs). Dock order and visibility belong to you and live in settings, never in the manifests, so an app rewriting its manifest can't undo your arrangement.
 
 ## How it's drawn
 
-Every surface is a frameless, always-on-top window whose **bounds are the visible shape**, so the real acrylic blur, the Windows 11 rounded corners and hit-testing follow every frame, and nothing transparent can swallow your clicks. There are three: the **main** window (the tab, which morphs into the dock or into the settings panel), the **settings card** below the dock, and the **preview card** to its left. Shape changes animate the native window rect with per-edge springs on a thread paced by `DwmFlush`; the UI lays out at its final size and is revealed, not reflowed.
+Every surface is a frameless, always-on-top window whose **bounds are the visible shape**, so the real acrylic blur, the Windows 11 rounded corners and hit-testing follow every frame, and nothing transparent can swallow your clicks. The **main** window is the tab, which morphs into the dock or into the settings panel; the **settings card** sits below the dock, the **preview card** to its left, and three **notification cards** pop out of the tab and stack beside it. Shape changes animate the native window rect with per-edge springs on a thread paced by `DwmFlush`; the UI lays out at its final size and is revealed, not reflowed.
 
 The dock opens on hover, so it never takes keyboard focus. While it's open, low-level mouse and keyboard hooks (installed only for that time) notice a click outside Holster and the `Esc` key. The settings panel does take focus, and closes when you click away.
 
-Previews are sandboxed iframes over Holster's material. Every preview stays loaded while the dock is open (and for 20 seconds after), so moving between tiles is a crossfade, never a reload. The settings and preview cards stay shown but parked off screen when unused (a freshly shown window draws a hollow frame for its first frames), and they carry the veil in their native material, so edges the webview hasn't repainted yet never flicker.
+Previews are sandboxed iframes over Holster's material. Every preview stays loaded while the dock is open (and for 20 seconds after), so moving between tiles is a crossfade, never a reload. The cards stay shown but parked off screen when unused (a freshly shown window draws a hollow frame for its first frames), and they carry the veil in their native material, so edges the webview hasn't repainted yet never flicker.
 
 ## Development
 
@@ -191,6 +196,7 @@ src-tauri/src/
   api.rs         the loopback API and holster.json
   hooks.rs       click-away and Escape for the dock without taking focus
   fullscreen.rs  game mode
+  notify.rs      notifications: the queue, the stack beside the tab, timers, callbacks
   settings.rs    settings.json
 src/             React + TypeScript UI (Framer Motion, dnd-kit, Lucide), one bundle for all windows
 skill/holster-app/SKILL.md   the app contract and design language
