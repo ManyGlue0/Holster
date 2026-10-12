@@ -19,7 +19,9 @@ const CARD_W = 340;
 
 /** One notification window. Holster places the window; this draws what's in
  *  it: a card Holster lays out from the app's title, text and buttons, or the
- *  app's own page. */
+ *  app's own page. The card grows out of the tab, so it starts and ends looking
+ *  like it (the tab's material, sheen and grip) and takes on the veil while
+ *  it's out, the way the dock does. */
 export function NoteWindow({ slot }: { slot: number }) {
   const note = useStore((s) => s.notes[slot] ?? null);
   const app = useStore((s) => s.apps.find((a) => a.id === note?.appId)) ?? null;
@@ -33,7 +35,14 @@ export function NoteWindow({ slot }: { slot: number }) {
   };
 
   return (
-    <div className="card-root note-root" onPointerEnter={() => hover(true)} onPointerLeave={() => hover(false)}>
+    <div
+      className={`card-root note-root ${note?.shown ? "out" : ""}`}
+      onPointerEnter={() => hover(true)}
+      onPointerLeave={() => hover(false)}
+    >
+      <div className="tab-sheen" />
+      <div className="tab-veil" />
+      <div className="tab-grip" />
       <AnimatePresence>
         {note && app && (
           <motion.div

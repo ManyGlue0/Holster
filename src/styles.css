@@ -511,7 +511,16 @@ code {
   display: flex;
   align-items: center;
 }
+/* It starts and ends as the tab: the veil comes in while it's out, the grip
+   goes. */
+.note-root.out .tab-veil {
+  opacity: 1;
+}
+.note-root.out .tab-grip {
+  opacity: 0;
+}
 .note-layer {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;

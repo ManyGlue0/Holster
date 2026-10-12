@@ -80,7 +80,7 @@ export function SettingsPage() {
           <Row label="Do not disturb" hint="Notifications wait until you turn this off. Also in the tray menu">
             <Toggle label="Do not disturb" on={settings.doNotDisturb} onChange={(v) => update({ doNotDisturb: v })} />
           </Row>
-          <Row label="Notification sound" hint="A soft sound when a notification pops out">
+          <Row label="Notification sound" hint="A soft sound when a notification comes in">
             <Toggle label="Notification sound" on={settings.notifySound} onChange={(v) => update({ notifySound: v })} />
           </Row>
           <div className="set-row disclosure-row">

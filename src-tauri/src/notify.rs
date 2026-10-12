@@ -1,7 +1,8 @@
-//! Notifications: small cards an app asks Holster to show. A card pops out of
-//! the tab, the newest sits at the tab's height and older ones are pushed
-//! away from it, and each folds back into the edge when it's dismissed, acted
-//! on, or its time is up.
+//! Notifications: small cards an app asks Holster to show. The tab grows into
+//! the card, like it grows into the dock: the newest card takes the tab's
+//! place on the edge and older ones are pushed away from it. A card folds
+//! into the edge when it's dismissed, acted on, or its time is up; the last
+//! one folds back into the tab.
 //!
 //! Holster owns the queue, the timers, the stack and the windows (three card
 //! windows, `notify-0..2`; more notifications wait their turn). The UI draws
@@ -46,12 +47,23 @@ const AFTER_HOVER: Duration = Duration::from_millis(1500);
 const FLICK_SHARE: f64 = 0.35;
 const FLICK_PX: f64 = 90.0;
 
-/// Out of the tab: sideways first (slight overshoot), then height, like a panel.
+/// The tab grows into the card like it grows into the dock: out from the edge
+/// first (slight overshoot), then height.
 const POP_SPRING: Spring = Spring {
-    omega: [21.0, 17.0, 21.0, 17.0],
-    zeta: [0.78, 0.9, 0.9, 0.9],
-    delay: [0.0, 0.035, 0.0, 0.035],
+    omega: [22.0, 19.0, 22.0, 19.0],
+    zeta: [0.8, 0.86, 0.9, 0.86],
+    delay: [0.0, 0.025, 0.0, 0.025],
 };
+/// The last card shrinks back into the tab like the dock does, once its
+/// content has faded.
+const INTO_TAB_SPRING: Spring = Spring {
+    omega: [25.0, 27.0, 25.0, 27.0],
+    zeta: [1.0, 1.0, 1.0, 1.0],
+    delay: [0.095, 0.07, 0.095, 0.07],
+};
+/// The tab under a card that has just folded into it gets this long to draw
+/// before the card goes.
+const TAB_HANDOVER: Duration = Duration::from_millis(60);
 const FOLD_SPRING: Spring = Spring::uniform(30.0, 1.0);
 /// The stack rearranging, a card resizing, a flick springing back.
 const GLIDE_SPRING: Spring = Spring::uniform(24.0, 0.92);
@@ -232,6 +244,9 @@ struct State {
     /// Bumped when a slot's window gets a new job, so stale fold callbacks
     /// don't park it.
     gen: [u64; NOTE_SLOTS],
+    /// The card folding back into the tab, if any: the tab stays hidden
+    /// until it's there.
+    tab_ghost: Option<usize>,
     ticking: bool,
 }
 
@@ -258,16 +273,18 @@ fn view(n: &Note) -> SlotView {
     SlotView { key: n.key, app_id: n.app.clone(), content, timed: n.timeout.is_some(), shown: n.out }
 }
 
-/// The stack, newest first: the newest card is centered on the tab, older
-/// ones go towards the side with more room, and the whole stack is kept on
-/// screen. Sizes in CSS px, rects in screen px.
+/// The stack, newest first: the newest card takes the tab's place (centered on
+/// it, flush with the edge like the dock), older ones go towards the side
+/// with more room, and the whole stack is kept on screen. Sizes in CSS px,
+/// rects in screen px. The edge side reaches past the screen edge as far as
+/// the tab does, so only the inner corners show.
 fn layout(f: &NoteFrame, sizes: &[(f64, f64)]) -> Vec<Rect> {
     if sizes.is_empty() {
         return Vec::new();
     }
     let s = f.scale;
     let (gap, margin) = ((GAP * s).round(), (MARGIN * s).round());
-    let right = f.tab.l - gap;
+    let (edge, right) = (f.work.r, f.tab.r);
     let cy = (f.tab.t + f.tab.b) / 2.0;
     let hs: Vec<f64> = sizes.iter().map(|(_, h)| (h * s).round()).collect();
     let down = f.work.b - cy >= cy - f.work.t;
@@ -292,18 +309,13 @@ fn layout(f: &NoteFrame, sizes: &[(f64, f64)]) -> Vec<Rect> {
         .zip(&hs)
         .map(|((t, (w, _)), h)| {
             let t = (t + shift).round();
-            Rect { l: right - (w * s).round(), t, r: right, b: t + h }
+            Rect { l: edge - (w * s).round(), t, r: right, b: t + h }
         })
         .collect()
 }
 
-/// Where a card grows from and folds back to: under the tab, so it seems to
-/// come out of it.
-fn tab_strip(f: &NoteFrame) -> Rect {
-    f.tab
-}
-
-/// Where a card that isn't next to the tab folds to: a sliver at its edge side.
+/// Where a card that doesn't fold into the tab goes: a sliver at its edge
+/// side, past the screen edge.
 fn sliver(f: &NoteFrame, cur: Rect) -> Rect {
     let cy = (cur.t + cur.b) / 2.0;
     let h = (cur.h() * 0.6).max(32.0 * f.scale);
@@ -423,14 +435,16 @@ impl Notifier {
     /// Removes a notification, folds its card, and tells the app why.
     fn finish(self: &Arc<Self>, key: u64, event: Option<&str>, button: Option<&str>) {
         let f = self.shell.note_frame();
-        let (gone, newest) = {
+        let (gone, last) = {
             let mut st = self.st.lock().unwrap();
             let Some(i) = st.notes.iter().position(|n| n.key == key) else { return };
-            let newest = st.notes.iter().filter(|n| n.out).map(|n| n.order).max() == Some(st.notes[i].order);
-            (st.notes.remove(i), newest)
+            let gone = st.notes.remove(i);
+            let last = !st.notes.iter().any(|n| n.out);
+            (gone, last)
         };
         if let Some(slot) = gone.slot {
-            self.fold(slot, &gone, &f, newest);
+            // The last card on screen becomes the tab again; others go into the edge.
+            self.fold(slot, &gone, &f, last && !f.held);
         }
         if let Some(e) = event {
             self.tell(&gone.app, &gone.nid, e, button);
@@ -438,13 +452,22 @@ impl Notifier {
         self.refresh();
     }
 
-    /// Folds a card away; its window keeps the content until it's parked.
-    fn fold(self: &Arc<Self>, slot: usize, n: &Note, f: &NoteFrame, next_to_tab: bool) {
+    /// Folds a card away, into the tab's shape or into the edge; its window
+    /// keeps the content until it's parked. Folding into the tab, the tab
+    /// comes back under the card once it's there, and the card goes a moment
+    /// later.
+    fn fold(self: &Arc<Self>, slot: usize, n: &Note, f: &NoteFrame, into_tab: bool) {
+        let into_tab = into_tab && n.out;
         let gen = {
             let mut st = self.st.lock().unwrap();
             st.gen[slot] += 1;
             if n.out {
                 st.ghosts[slot] = Some(SlotView { shown: false, ..view(n) });
+            }
+            if into_tab {
+                st.tab_ghost = Some(slot);
+            } else if st.tab_ghost == Some(slot) {
+                st.tab_ghost = None;
             }
             st.gen[slot]
         };
@@ -454,24 +477,51 @@ impl Notifier {
             park(win);
             return;
         }
-        let cur = win.anim.target();
-        let to = if next_to_tab { tab_strip(f) } else { sliver(f, cur) };
         let me = self.clone();
-        win.anim.animate(
-            to,
-            FOLD_SPRING,
-            Some(Box::new(move || {
-                let mut st = me.st.lock().unwrap();
-                if st.gen[slot] == gen {
-                    st.ghosts[slot] = None;
-                    drop(st);
-                    park(me.shell.note_win(slot));
-                    me.emit();
-                    me.refresh();
-                }
-            })),
-            None,
-        );
+        let gone = move |me: &Arc<Self>| {
+            let mut st = me.st.lock().unwrap();
+            if st.gen[slot] == gen {
+                st.ghosts[slot] = None;
+                drop(st);
+                park(me.shell.note_win(slot));
+                me.emit();
+                me.refresh();
+            }
+        };
+        if into_tab {
+            win.anim.animate(
+                f.tab,
+                INTO_TAB_SPRING,
+                None,
+                Some(Box::new(move || {
+                    {
+                        let mut st = me.st.lock().unwrap();
+                        if st.gen[slot] != gen {
+                            return;
+                        }
+                        st.tab_ghost = None;
+                    }
+                    me.sync_tab();
+                    me.shell.raise(me.shell.note_win(slot));
+                    std::thread::spawn(move || {
+                        std::thread::sleep(TAB_HANDOVER);
+                        gone(&me);
+                    });
+                })),
+            );
+        } else {
+            let to = sliver(f, win.anim.target());
+            win.anim.animate(to, FOLD_SPRING, Some(Box::new(move || gone(&me))), None);
+        }
+    }
+
+    /// The tab hides while a card stands in for it, and comes back when none does.
+    fn sync_tab(self: &Arc<Self>) {
+        let covered = {
+            let st = self.st.lock().unwrap();
+            st.tab_ghost.is_some() || st.notes.iter().any(|n| n.out)
+        };
+        self.shell.note_cover(covered);
     }
 
     /// A page that leaves out Holster's `×` must close itself, so it has to
@@ -573,11 +623,14 @@ impl Notifier {
                 }
             }
         }
+        // Folding for a wait: no event, the notification stays queued. With
+        // only Do not disturb holding them, the newest folds back into the tab.
+        let newest = to_fold.iter().filter(|(_, n)| n.out).map(|(_, n)| n.order).max();
         for (slot, n) in &to_fold {
-            // Folding for a wait: no event, the notification stays queued.
-            self.fold(slot.to_owned(), n, &f, false);
+            self.fold(slot.to_owned(), n, &f, !f.held && Some(n.order) == newest);
         }
         if held {
+            self.sync_tab();
             if changed || !to_fold.is_empty() {
                 self.emit();
             }
@@ -624,11 +677,15 @@ impl Notifier {
         if !pops.is_empty() {
             self.emit();
         }
-        for (slot, rect) in pops {
+        for (slot, rect) in pops.iter().copied() {
+            // The card starts as the tab, above it, and grows out of it.
             let win = self.shell.note_win(slot);
-            win.anim.jump(tab_strip(f));
-            self.shell.raise_tab();
+            win.anim.jump(f.tab);
+            self.shell.raise(win);
             win.anim.animate(rect, POP_SPRING, None, None);
+        }
+        if !pops.is_empty() {
+            self.sync_tab();
         }
         for (slot, rect) in moves {
             self.shell.note_win(slot).anim.animate(rect, GLIDE_SPRING, None, None);
@@ -830,7 +887,8 @@ mod tests {
     fn stack_grows_towards_the_room() {
         let sizes = [(340.0, 100.0), (340.0, 80.0)];
         let low = layout(&frame(300.0), &sizes);
-        assert_eq!((low[0].t, low[0].r), (250.0, 1898.0));
+        // Flush with the edge, reaching past it like the tab.
+        assert_eq!((low[0].l, low[0].t, low[0].r), (1580.0, 250.0, 1930.0));
         assert!(low[1].t > low[0].b, "older card below");
         let high = layout(&frame(900.0), &sizes);
         assert!(high[1].b < high[0].t, "older card above");

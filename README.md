@@ -37,7 +37,7 @@ Holster is **only the frame**. Every app in it decides its own icon, its color, 
 - **Previews without opening anything.** Hover a tile and the app's preview slides out like a drawer. Previews can be pages on disk, so they show even when the app isn't running. Moving between tiles crossfades, never reloads.
 - **Never steals your focus.** The dock opens on hover without taking the keyboard from what you're typing in. Only a click outside, `Esc`, the shortcut, or opening an app closes it, so a stray mouse move can't make it vanish.
 - **Apps take the edge.** When an app opens its own side panel, the dock folds into the edge and the tab steps aside until the panel closes.
-- **Notifications.** A small card pops out of the tab with the app's own title, text and buttons (or its own page), and folds back when you're done. Newest at the tab, up to three at once. Timed or sticky, paused while you hover it, flicked away into the edge. Mute an app, or turn on Do not disturb.
+- **Notifications.** The tab grows into a small card with the app's own title, text and buttons (or its own page), the way it grows into the dock, and shrinks back into the tab when you're done. Newest at the tab, up to three at once. Timed or sticky, paused while you hover it, flicked away into the edge. Mute an app, or turn on Do not disturb.
 - **Ambient signals.** An app can say "something happened" and the tab glows in its color, or its tile pulses while the dock is open.
 - **Game mode.** While a fullscreen app is in front, the tab tucks away and never takes focus. Glows wait until you're back.
 - **Native all the way down.** Real acrylic, Windows 11 corners and hit-testing on every frame, spring animations paced by the compositor, light and dark themes.
@@ -166,7 +166,7 @@ Everything lives in `%APPDATA%\Holster\`: `settings.json` (theme, shortcut, dock
 
 ## How it's drawn
 
-Every surface is a frameless, always-on-top window whose **bounds are the visible shape**, so the real acrylic blur, the Windows 11 rounded corners and hit-testing follow every frame, and nothing transparent can swallow your clicks. The **main** window is the tab, which morphs into the dock or into the settings panel; the **settings card** sits below the dock, the **preview card** to its left, and three **notification cards** pop out of the tab and stack beside it. Shape changes animate the native window rect with per-edge springs on a thread paced by `DwmFlush`; the UI lays out at its final size and is revealed, not reflowed.
+Every surface is a frameless, always-on-top window whose **bounds are the visible shape**, so the real acrylic blur, the Windows 11 rounded corners and hit-testing follow every frame, and nothing transparent can swallow your clicks. The **main** window is the tab, which morphs into the dock or into the settings panel; the **settings card** sits below the dock, the **preview card** to its left, and three **notification cards** grow out of the tab (the newest takes its place on the edge, the tab hiding under it) and stack along the edge. Shape changes animate the native window rect with per-edge springs on a thread paced by `DwmFlush`; the UI lays out at its final size and is revealed, not reflowed.
 
 The dock opens on hover, so it never takes keyboard focus. While it's open, low-level mouse and keyboard hooks (installed only for that time) notice a click outside Holster and the `Esc` key. The settings panel does take focus, and closes when you click away.
 

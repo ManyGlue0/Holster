@@ -31,7 +31,7 @@ pub struct Settings {
     pub muted: Vec<String>,
     /// Notifications wait (like during a fullscreen app) until this is off.
     pub do_not_disturb: bool,
-    /// A soft system sound when a notification pops out.
+    /// A soft system sound when a notification comes in.
     pub notify_sound: bool,
     pub delays: Delays,
 }

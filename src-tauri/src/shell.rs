@@ -470,6 +470,9 @@ struct State {
     preview_failed: std::collections::HashSet<String>,
     /// Bumped on every preview change so delayed hides can tell they're stale.
     preview_gen: u64,
+    /// The tab has grown into a notification card (the card's window stands
+    /// in for it), so the tab itself is hidden.
+    note_cover: bool,
 }
 
 impl State {
@@ -491,8 +494,8 @@ pub(crate) struct NoteFrame {
     pub scale: f64,
     pub work: Rect,
     pub tab: Rect,
-    /// The tab is busy or away: dock or settings open, tucked for a
-    /// fullscreen app or an app panel. Notifications wait.
+    /// The tab is busy or away: dock or settings open, being dragged, tucked
+    /// for a fullscreen app or an app panel. Notifications wait.
     pub held: bool,
     /// The dock or settings is open (a new notification pulses its tile).
     pub open: bool,
@@ -646,6 +649,7 @@ impl Shell {
                 gear_out: false,
                 preview_failed: Default::default(),
                 preview_gen: 0,
+                note_cover: false,
             }),
             on_change: OnceLock::new(),
         });
@@ -695,15 +699,52 @@ impl Shell {
 
     pub(crate) fn note_frame(&self) -> NoteFrame {
         let st = self.state.lock().unwrap();
-        let (held, open) = (st.mode != Mode::Closed || st.tucked(), st.mode != Mode::Closed);
+        let (held, open) = (st.mode != Mode::Closed || st.tucked() || st.drag.is_some(), st.mode != Mode::Closed);
         drop(st);
         let g = self.geometry();
         NoteFrame { scale: g.scale, work: g.work, tab: g.tab, held, open }
     }
 
-    /// Keeps the tab above a card that's growing out from under it.
-    pub(crate) fn raise_tab(&self) {
-        if visible(self.main.hwnd) {
+    /// Puts a card window above the others (and above the tab).
+    pub(crate) fn raise(&self, win: &Win) {
+        show(win.hwnd);
+    }
+
+    /// A notification card takes the tab's place: it starts as the tab and
+    /// grows from it, so the tab hides underneath (a frame later, once the card
+    /// is drawn there). When the last card has folded back into the tab's
+    /// shape, the tab returns under it. Only while the tab is resting: an open
+    /// dock or a tucked tab is left alone.
+    pub(crate) fn note_cover(self: &Arc<Self>, on: bool) {
+        let resting = {
+            let mut st = self.state.lock().unwrap();
+            if st.note_cover == on {
+                return;
+            }
+            st.note_cover = on;
+            let resting = st.mode == Mode::Closed && !st.tucked();
+            if on && resting {
+                st.hover = false;
+            }
+            resting
+        };
+        if !resting {
+            return;
+        }
+        let g = self.geometry();
+        if on {
+            let me = self.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(20));
+                let st = me.state.lock().unwrap();
+                if st.note_cover && st.mode == Mode::Closed && !st.tucked() {
+                    drop(st);
+                    hide(me.main.hwnd);
+                    me.main.anim.jump(g.tab);
+                }
+            });
+        } else {
+            self.main.anim.jump(g.tab);
             show(self.main.hwnd);
         }
     }
@@ -1062,6 +1103,8 @@ impl Shell {
                     let frac = self.prefs.get().tab.y_frac;
                     self.prefs.update(|s| s.tab.y_frac = frac);
                 }
+                // Notifications wait for the tab to be let go.
+                self.changed();
                 moved
             }
         }

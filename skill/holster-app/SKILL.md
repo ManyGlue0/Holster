@@ -189,7 +189,7 @@ Holster's API rejects requests whose `Host` isn't `127.0.0.1:<port>` or `localho
 
 ### 1.8 Notifications
 
-A notification is a small card that pops out of Holster's tab. The newest sits at the tab's height and older ones are pushed away from it; up to three show at once, and more wait their turn.
+A notification is a small card Holster's tab grows into, the way it grows into the dock. The newest takes the tab's place on the edge and older ones are pushed away from it; when the last one goes, it shrinks back into the tab; up to three show at once, and more wait their turn.
 
 ```http
 POST {api}/apps/<id>/notify
