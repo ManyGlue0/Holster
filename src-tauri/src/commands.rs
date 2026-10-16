@@ -304,6 +304,20 @@ pub async fn app_info(app: AppHandle, core: C<'_>) -> Res<Value> {
     }))
 }
 
+// ---- updates ---------------------------------------------------------------------
+
+/// The newer version on GitHub, if there is one.
+#[tauri::command]
+pub async fn update_check(app: AppHandle, core: C<'_>) -> Res<Option<crate::update::Available>> {
+    crate::update::check(&app, &core.update, core.data_dir.clone()).await
+}
+
+/// Installs what `update_check` found; Holster restarts as the new version.
+#[tauri::command]
+pub async fn update_install(app: AppHandle, core: C<'_>) -> Res<()> {
+    crate::update::install(&app, &core.update).await
+}
+
 // ---- notifications ---------------------------------------------------------------
 
 #[tauri::command]

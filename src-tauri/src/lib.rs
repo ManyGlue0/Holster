@@ -9,6 +9,7 @@ mod notify;
 mod process;
 mod settings;
 mod shell;
+mod update;
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -37,6 +38,7 @@ pub struct Core {
     pub port: RwLock<u16>,
     shell: OnceLock<Arc<Shell>>,
     notifier: OnceLock<Arc<Notifier>>,
+    pub update: update::Pending,
 }
 
 impl Core {
@@ -85,8 +87,10 @@ impl Core {
 
 /// The holster folder: `%APPDATA%\Holster`. Apps find the manifests folder
 /// and `holster.json` here, so it is part of the contract.
-fn holster_dir() -> PathBuf {
-    std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("Holster")
+/// `%APPDATA%\Holster`: named after the product, so a differently named
+/// build (a test of the updater) keeps its data apart.
+fn holster_dir(product: &str) -> PathBuf {
+    std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join(product)
 }
 
 fn apply_theme(app: &AppHandle, theme: &str) {
@@ -234,9 +238,10 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let data_dir = holster_dir();
+            let data_dir = holster_dir(&app.package_info().name);
             std::fs::create_dir_all(&data_dir)?;
             diag::init(&data_dir);
             diag::log(format!("Holster {} started", app.package_info().version));
@@ -264,6 +269,7 @@ pub fn run() {
                 port: RwLock::new(0),
                 shell: OnceLock::new(),
                 notifier: OnceLock::new(),
+                update: Default::default(),
             });
             app.manage(core.clone());
 
@@ -341,6 +347,8 @@ pub fn run() {
             commands::preview_resize,
             commands::preview_failed,
             commands::diag_log,
+            commands::update_check,
+            commands::update_install,
             commands::list_apps,
             commands::open_app,
             commands::reorder_apps,

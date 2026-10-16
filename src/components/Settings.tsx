@@ -2,9 +2,9 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BellOff, ChevronLeft, ChevronRight, FolderOpen, GripVertical, PackageOpen, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Bell, BellOff, ChevronLeft, ChevronRight, Download, FolderOpen, GripVertical, PackageOpen, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type AppInfo, type AppView } from "../lib/api";
+import { api, on, type AppInfo, type AppView } from "../lib/api";
 import { AppIcon } from "../lib/icons";
 import { spring } from "../lib/motion";
 import { tileVars } from "../lib/palette";
@@ -135,6 +135,8 @@ export function SettingsPage() {
           </AnimatePresence>
         </Section>
 
+        <UpdatesSection version={info?.version} />
+
         <div className="about">
           Holster {info?.version}
           {info?.port ? (
@@ -146,6 +148,83 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---- updates -----------------------------------------------------------------------
+
+type UpdateState =
+  | { step: "idle" | "checking" | "latest" | "installing" }
+  | { step: "available"; version: string }
+  | { step: "downloading"; version: string; pct: number | null }
+  | { step: "error"; message: string };
+
+/** Checks GitHub for a newer Holster when asked, and installs it on Update. */
+function UpdatesSection({ version }: { version?: string }) {
+  const [state, setState] = useState<UpdateState>({ step: "idle" });
+
+  useEffect(
+    () =>
+      on<{ downloaded: number; total: number | null }>("update-progress", ({ downloaded, total }) =>
+        setState((s) =>
+          s.step === "downloading" ? { ...s, pct: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null } : s,
+        ),
+      ),
+    [],
+  );
+
+  const check = async () => {
+    setState({ step: "checking" });
+    try {
+      const found = await api.updateCheck();
+      setState(found ? { step: "available", version: found.version } : { step: "latest" });
+    } catch (e) {
+      setState({ step: "error", message: String(e) });
+    }
+  };
+  const install = async (version: string) => {
+    setState({ step: "downloading", version, pct: 0 });
+    try {
+      await api.updateInstall();
+      setState({ step: "installing" });
+    } catch (e) {
+      setState({ step: "error", message: String(e) });
+    }
+  };
+
+  const hint =
+    state.step === "checking"
+      ? "Checking…"
+      : state.step === "latest"
+        ? "You have the latest version"
+        : state.step === "available"
+          ? `Version ${state.version} is ready. Holster restarts by itself`
+          : state.step === "downloading"
+            ? `Downloading ${state.version}${state.pct === null ? "…" : `, ${state.pct}%`}`
+            : state.step === "installing"
+              ? "Installing. Holster restarts by itself"
+              : state.step === "error"
+                ? state.message
+                : "Looks for a newer version on GitHub";
+
+  return (
+    <Section title="Updates">
+      <Row label={version ? `Holster ${version}` : "Holster"} hint={hint} warn={state.step === "error"}>
+        {state.step === "available" ? (
+          <Button variant="primary" onClick={() => install(state.version)}>
+            <Download size={14} /> Update
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            disabled={state.step === "checking" || state.step === "downloading" || state.step === "installing"}
+            onClick={check}
+          >
+            <RefreshCw size={14} className={state.step === "checking" ? "spin" : ""} /> Check
+          </Button>
+        )}
+      </Row>
+    </Section>
   );
 }
 

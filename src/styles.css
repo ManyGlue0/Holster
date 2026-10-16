@@ -1234,3 +1234,13 @@ kbd {
 .toast button:hover {
   background: rgba(127, 127, 127, 0.32);
 }
+
+/* A control that's busy (checking for updates). */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

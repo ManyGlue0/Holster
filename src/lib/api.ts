@@ -125,6 +125,8 @@ export const api = {
   previewHide: () => invoke("preview_hide"),
   previewResize: (id: string, width: number, height: number) => invoke("preview_resize", { id, width, height }),
   previewFailed: (id: string, failed: boolean) => invoke("preview_failed", { id, failed }),
+  updateCheck: () => invoke<{ version: string; notes: string | null } | null>("update_check"),
+  updateInstall: () => invoke("update_install"),
   /** A line for the diagnostic log (holster.log, next to settings.json). */
   diag: (message: string) => invoke("diag_log", { message }).catch(() => {}),
 

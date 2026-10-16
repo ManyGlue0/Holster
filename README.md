@@ -63,7 +63,7 @@ Get the installer (`Holster_<version>_x64-setup.exe`) from the **[latest release
 
 The installer isn't code-signed, so Windows SmartScreen may warn you the first time: click **More info**, then **Run anyway**.
 
-To update, run a newer installer over the old one. Your apps and settings live in `%APPDATA%\Holster` and are kept.
+To update, open **Settings → Updates** and press **Check**: Holster downloads the new version, verifies its signature and restarts. (Before 0.2.5 there's no Updates card, so install that one by hand.) Running a newer installer over the old one works too. Either way your apps and settings, in `%APPDATA%\Holster`, are kept.
 
 ### Build it yourself
 
@@ -179,16 +179,20 @@ pnpm install
 pnpm tauri dev        # Vite + the app, with hot reload for the UI
 pnpm hello            # the example app (registers itself with Holster)
 pnpm tauri build      # installer at target/release/bundle/nsis/
+pnpm release:build    # the same, signed for the updater, plus latest.json
 cargo test -p holster # backend unit tests
 ```
 
 To try things without touching your real setup, point `APPDATA` at a sandbox folder before starting Holster and the example, and run dev under its own identifier so it doesn't meet an installed copy: `pnpm tauri dev --config dev-config.json` with `{ "identifier": "app.holster.dev" }` in that file. To inspect the UI, set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` and open `http://127.0.0.1:9333`.
+
+Releases are signed for the in-app updater. `pnpm release:build` needs Holster's private key from `pnpm tauri signer generate` (`HOLSTER_SIGNING_KEY`, by default `%USERPROFILE%\.tauri\holster.key`) and its password (`HOLSTER_SIGNING_KEY_PASSWORD`), in the shell or as Windows user variables. Attach the installer and `latest.json` to the GitHub release; the updater reads `releases/latest/download/latest.json`. A plain `pnpm tauri build` needs no key.
 
 `pnpm icons` regenerates the Lucide data (`src/lib/lucide-nodes.json` for rendering, `src-tauri/src/lucide-names.txt` for manifest validation). `pnpm app-icon` renders every app icon size from [`src-tauri/icons/holster-icon.svg`](src-tauri/icons/holster-icon.svg) with headless Edge.
 
 ```
 src-tauri/src/
   lib.rs         app setup: windows, plugins, tray, hotkey, API, watchers
+  update.rs      checking for and installing updates from GitHub Releases
   shell.rs       the three windows: spring-animated native bounds, geometry, acrylic, focus
   apps.rs        manifests: parsing, validation, dock order, folder watcher
   health.rs      running / not running, polled only while something is open
