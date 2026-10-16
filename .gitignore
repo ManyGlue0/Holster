@@ -4,6 +4,9 @@ target
 src-tauri/gen
 *.log
 
-# Signing keys never belong in the repo: they live in %USERPROFILE%\.tauri\ (docs/RELEASING.md)
+# Signing keys never belong in the repo: they live in %USERPROFILE%\.tauri\
 *.key
 *.key.pub
+
+# Local notes, not for the repo
+docs/RELEASING.md

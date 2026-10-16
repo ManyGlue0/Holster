@@ -185,7 +185,7 @@ cargo test -p holster # backend unit tests
 
 To try things without touching your real setup, point `APPDATA` at a sandbox folder before starting Holster and the example, and run dev under its own identifier so it doesn't meet an installed copy: `pnpm tauri dev --config dev-config.json` with `{ "identifier": "app.holster.dev" }` in that file. To inspect the UI, set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` and open `http://127.0.0.1:9333`.
 
-Releases are signed for the in-app updater; the whole process is in [docs/RELEASING.md](docs/RELEASING.md). `pnpm release:build` needs Holster's private key from `pnpm tauri signer generate` (`HOLSTER_SIGNING_KEY`, by default `%USERPROFILE%\.tauri\holster.key`) and its password (`HOLSTER_SIGNING_KEY_PASSWORD`), in the shell or as Windows user variables. Attach the installer and `latest.json` to the GitHub release; the updater reads `releases/latest/download/latest.json`. A plain `pnpm tauri build` needs no key.
+Releases are signed for the in-app updater. `pnpm release:build` needs Holster's private key from `pnpm tauri signer generate` (`HOLSTER_SIGNING_KEY`, by default `%USERPROFILE%\.tauri\holster.key`) and its password (`HOLSTER_SIGNING_KEY_PASSWORD`), in the shell or as Windows user variables. Attach the installer and `latest.json` to the GitHub release; the updater reads `releases/latest/download/latest.json`. A plain `pnpm tauri build` needs no key.
 
 `pnpm icons` regenerates the Lucide data (`src/lib/lucide-nodes.json` for rendering, `src-tauri/src/lucide-names.txt` for manifest validation). `pnpm app-icon` renders every app icon size from [`src-tauri/icons/holster-icon.svg`](src-tauri/icons/holster-icon.svg) with headless Edge.
 
