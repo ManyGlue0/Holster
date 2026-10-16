@@ -3,3 +3,7 @@ dist
 target
 src-tauri/gen
 *.log
+
+# Signing keys never belong in the repo: they live in %USERPROFILE%\.tauri\ (docs/RELEASING.md)
+*.key
+*.key.pub
