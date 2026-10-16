@@ -162,7 +162,7 @@ Invoke-RestMethod -Method Post "$($holster.api)/apps/notes/signal" -ContentType 
 
 ## Your data
 
-Everything lives in `%APPDATA%\Holster\`: `settings.json` (theme, shortcut, dock order, hidden and muted apps, Do not disturb, tab position, hover timing), `apps\` (one manifest per app) and `holster.json` (only while Holster runs). Dock order and visibility belong to you and live in settings, never in the manifests, so an app rewriting its manifest can't undo your arrangement.
+Everything lives in `%APPDATA%\Holster\`: `settings.json` (theme, shortcut, dock order, hidden and muted apps, Do not disturb, tab position, hover timing), `apps\` (one manifest per app) `holster.json` (only while Holster runs) and `holster.log`, a small diagnostic log (it never grows past a few hundred KB) worth attaching when you report a bug. Dock order and visibility belong to you and live in settings, never in the manifests, so an app rewriting its manifest can't undo your arrangement.
 
 ## How it's drawn
 
@@ -194,9 +194,10 @@ src-tauri/src/
   health.rs      running / not running, polled only while something is open
   process.rs     launching apps, finding and focusing their windows
   api.rs         the loopback API and holster.json
+  diag.rs        holster.log, the diagnostic log
   hooks.rs       click-away and Escape for the dock without taking focus
   fullscreen.rs  game mode
-  notify.rs      notifications: the queue, the stack beside the tab, timers, callbacks
+  notify.rs      notifications: the queue, the stack growing out of the tab, timers, callbacks
   settings.rs    settings.json
 src/             React + TypeScript UI (Framer Motion, dnd-kit, Lucide), one bundle for all windows
 skill/holster-app/SKILL.md   the app contract and design language

@@ -31,6 +31,8 @@ export interface ShellState {
   panelHeight: number;
   overhang: number;
   tucked: boolean;
+  /** Newer states have a higher number; an older one arriving late is dropped. */
+  seq: number;
 }
 
 export interface Rect {
@@ -49,6 +51,7 @@ export interface PreviewState {
   shown: boolean;
   /** Card bounds relative to the main window (CSS px). */
   rel: Rect | null;
+  seq: number;
 }
 
 export type AppStatus = "unknown" | "running" | "stopped";
@@ -122,6 +125,8 @@ export const api = {
   previewHide: () => invoke("preview_hide"),
   previewResize: (id: string, width: number, height: number) => invoke("preview_resize", { id, width, height }),
   previewFailed: (id: string, failed: boolean) => invoke("preview_failed", { id, failed }),
+  /** A line for the diagnostic log (holster.log, next to settings.json). */
+  diag: (message: string) => invoke("diag_log", { message }).catch(() => {}),
 
   listApps: () => invoke<AppView[]>("list_apps"),
   openApp: (id: string, anchorY: number) => invoke("open_app", { id, anchorY }),

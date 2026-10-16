@@ -80,6 +80,13 @@ pub async fn preview_resize(core: C<'_>, id: String, width: f64, height: f64) ->
     Ok(())
 }
 
+/// A window reports something worth keeping in the diagnostic log.
+#[tauri::command]
+pub async fn diag_log(window: tauri::WebviewWindow, message: String) -> Res<()> {
+    crate::diag::log(format!("[{}] {message}", window.label()));
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn preview_failed(core: C<'_>, id: String, failed: bool) -> Res<()> {
     core.shell().preview_failed(&id, failed);

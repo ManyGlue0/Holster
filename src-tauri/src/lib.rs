@@ -1,6 +1,7 @@
 mod api;
 mod apps;
 mod commands;
+mod diag;
 mod fullscreen;
 mod health;
 mod hooks;
@@ -237,6 +238,8 @@ pub fn run() {
             let handle = app.handle().clone();
             let data_dir = holster_dir();
             std::fs::create_dir_all(&data_dir)?;
+            diag::init(&data_dir);
+            diag::log(format!("Holster {} started", app.package_info().version));
             let prefs = Arc::new(Prefs::new(SettingsStore::new(&data_dir)));
             let settings = prefs.get();
 
@@ -337,6 +340,7 @@ pub fn run() {
             commands::preview_hide,
             commands::preview_resize,
             commands::preview_failed,
+            commands::diag_log,
             commands::list_apps,
             commands::open_app,
             commands::reorder_apps,

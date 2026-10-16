@@ -40,9 +40,12 @@ export function PreviewWindow() {
   const mode = useStore((s) => s.shell.mode);
   const dark = useDark();
   const theme = dark ? "dark" : "light";
-  const dockOpen = mode === "opening" || mode === "dock";
+  // A card on screen needs its page even if a dock state arrived late.
+  const dockOpen = mode === "opening" || mode === "dock" || preview.appId !== null;
   const [alive, setAlive] = useState(false);
   const [loaded, setLoaded] = useState<Set<string>>(new Set());
+  /** Bumped when an app's page misses its load window: its frame starts over. */
+  const [attempts, setAttempts] = useState<Record<string, number>>({});
   const frames = useRef(new Map<string, { el: HTMLIFrameElement; origin: string }>());
   /** Last size each page was shown at, so hidden pages don't reflow. */
   const sizes = useRef(new Map<string, { w: number; h: number }>());
@@ -63,9 +66,10 @@ export function PreviewWindow() {
     () => apps.flatMap((app) => (previewSrc(app) ? [{ app, src: previewSrc(app)! }] : [])),
     [apps],
   );
+  const keyOf = (app: AppView) => `${app.id}|${previewSrc(app)}|${attempts[app.id] ?? 0}`;
   const active = apps.find((a) => a.id === preview.appId) ?? null;
   const showError = preview.shown && !!active && !!preview.error;
-  const activeKey = active && !preview.error ? `${active.id}|${previewSrc(active)}` : null;
+  const activeKey = active && !preview.error ? keyOf(active) : null;
   if (active && activeKey && !preview.error) sizes.current.set(active.id, { w: preview.width, h: preview.height });
 
   const post = (id: string, msg: object) => {
@@ -103,19 +107,29 @@ export function PreviewWindow() {
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
-  // A page that doesn't load in time is skipped (the card folds away).
+  // A page that doesn't load in time is skipped (the card folds away) and
+  // loaded again from scratch; once it loads it's shown again.
   useEffect(() => {
     if (!active || !activeKey || loaded.has(activeKey)) return;
     const id = active.id;
-    const t = window.setTimeout(() => api.previewFailed(id, true), LOAD_TIMEOUT);
+    const t = window.setTimeout(() => {
+      const frame = pages.some(({ app }) => keyOf(app) === activeKey);
+      api.diag(
+        `preview of ${id} didn't load in ${LOAD_TIMEOUT} ms (frame ${frame ? "mounted" : "missing"}, ` +
+          `alive ${alive}, mode ${useStore.getState().shell.mode}, ${loaded.size}/${pages.length} pages loaded, ` +
+          `page ${document.visibilityState})`,
+      );
+      api.previewFailed(id, true);
+      setAttempts((a) => ({ ...a, [id]: (a[id] ?? 0) + 1 }));
+    }, LOAD_TIMEOUT);
     return () => window.clearTimeout(t);
-  }, [active, activeKey, loaded]);
+  }, [active, activeKey, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="card-root preview-root" onPointerEnter={() => api.previewHover(true)} onPointerLeave={() => api.previewHover(false)}>
       {alive &&
         pages.map(({ app, src }) => {
-          const key = `${app.id}|${src}`;
+          const key = keyOf(app);
           const on = preview.shown && activeKey === key && loaded.has(key);
           const size = sizes.current.get(app.id);
           return (

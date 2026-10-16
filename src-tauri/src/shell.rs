@@ -392,6 +392,16 @@ pub struct ShellState {
     /// The tab is tucked into the edge: a fullscreen app is in front, or an
     /// app's panel is out on Holster's edge.
     pub tucked: bool,
+    /// Increases with every state sent; windows ignore an older one that
+    /// arrives late (events from different threads can cross).
+    pub seq: u64,
+}
+
+/// Orders shell and preview states (see `ShellState::seq`).
+static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn next_seq() -> u64 {
+    SEQ.fetch_add(1, Ordering::SeqCst)
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -407,6 +417,14 @@ pub struct PreviewState {
     pub shown: bool,
     /// Card bounds relative to the main window, in CSS px (for the hover corridor).
     pub rel: Option<Rect>,
+    /// See `ShellState::seq`.
+    pub seq: u64,
+}
+
+impl PreviewState {
+    fn none() -> Self {
+        Self { app_id: None, width: 0.0, height: 0.0, fallback: false, error: None, shown: false, rel: None, seq: next_seq() }
+    }
 }
 
 struct Geometry {
@@ -847,6 +865,7 @@ impl Shell {
             panel_height: g.panel.h() / g.scale,
             overhang: g.overhang,
             tucked: st.tucked(),
+            seq: next_seq(),
         }
     }
 
@@ -892,7 +911,14 @@ impl Shell {
             unsafe { SendMessageW(self.main.hwnd as HWND, WM_RESTORE_FOCUS, prev as WPARAM, 0) };
         }
         let g = self.geometry();
-        self.state.lock().unwrap().rows = g.rows;
+        let failed: Vec<String> = {
+            let mut st = self.state.lock().unwrap();
+            st.rows = g.rows;
+            st.preview_failed.drain().collect()
+        };
+        if !failed.is_empty() {
+            crate::diag::log(format!("dock opened: previews of {} get another chance", failed.join(", ")));
+        }
         self.sync_mode(Mode::Opening);
         self.set_noactivate(0, true);
         self.emit_state();
@@ -1176,9 +1202,10 @@ impl Shell {
                     error: p.error.clone(),
                     shown: st.preview_shown,
                     rel: Some(Rect { l: (r.l - d.l) / s, t: (r.t - d.t) / s, r: (r.r - d.l) / s, b: (r.b - d.t) / s }),
+                    seq: next_seq(),
                 }
             }
-            None => PreviewState { app_id: None, width: 0.0, height: 0.0, fallback: false, error: None, shown: false, rel: None },
+            None => PreviewState::none(),
         };
         drop(st);
         let _ = self.app.emit("preview", payload);
@@ -1336,6 +1363,12 @@ impl Shell {
             if !changed {
                 return;
             }
+            let others = st.preview_failed.len() - usize::from(failed);
+            crate::diag::log(if failed {
+                format!("preview of {id} didn't load in time; skipped until it loads ({others} other(s) skipped)")
+            } else {
+                format!("preview of {id} loaded; shown again ({others} still skipped)")
+            });
         }
         self.refit_preview(id);
     }
@@ -1389,8 +1422,9 @@ impl Shell {
                 error: p.error.clone(),
                 shown: st.preview_shown,
                 rel: None,
+                seq: next_seq(),
             },
-            None => PreviewState { app_id: None, width: 0.0, height: 0.0, fallback: false, error: None, shown: false, rel: None },
+            None => PreviewState::none(),
         }
     }
 

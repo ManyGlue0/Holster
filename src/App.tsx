@@ -18,6 +18,11 @@ function retry(fn: () => Promise<unknown>, attempt = 0) {
 }
 document.documentElement.dataset.window = label;
 
+/** Previews from different threads can cross on the way: keep the newest. */
+function setPreview(preview: PreviewState) {
+  if (preview.seq >= useStore.getState().preview.seq) useStore.setState({ preview });
+}
+
 /** One bundle, every window: each renders its own surface over shared state. */
 export default function App() {
   const dark = useDark();
@@ -27,12 +32,18 @@ export default function App() {
     // The main window can load before the backend has finished setting up:
     // retry the first reads until it answers.
     retry(() => api.shellState().then(s.setShell));
-    retry(() => api.previewState().then((preview) => useStore.setState({ preview })));
+    retry(() => api.previewState().then(setPreview));
     retry(() => api.noteSlots().then((notes) => useStore.setState({ notes })));
     retry(s.loadSettings);
     retry(s.refreshApps);
     // Warm the icon set after first paint; the tab doesn't need it.
     setTimeout(loadIcons, 200);
+
+    // Anything that breaks in a window goes to the diagnostic log.
+    const onError = (e: ErrorEvent) => api.diag(`error: ${e.message} at ${e.filename}:${e.lineno}`);
+    const onRejection = (e: PromiseRejectionEvent) => api.diag(`unhandled rejection: ${String(e.reason)}`);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onMedia = () => useStore.setState({ systemDark: media.matches });
@@ -40,7 +51,7 @@ export default function App() {
 
     const offs = [
       on<ShellState>("shell", (st) => useStore.getState().setShell(st)),
-      on<PreviewState>("preview", (preview) => useStore.setState({ preview })),
+      on<PreviewState>("preview", setPreview),
       on<AppView[]>("apps", (apps) => useStore.setState({ apps, appsLoaded: true })),
       on<Settings>("settings", (settings) => useStore.setState({ settings })),
       on<(NoteSlot | null)[]>("notes", (notes) => useStore.setState({ notes })),
@@ -48,6 +59,8 @@ export default function App() {
     return () => {
       offs.forEach((off) => off());
       media.removeEventListener("change", onMedia);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
     };
   }, []);
 

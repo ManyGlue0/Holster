@@ -49,9 +49,10 @@ export const useStore = create<Store>((set, get) => ({
     panelHeight: 800,
     overhang: 0,
     tucked: false,
+    seq: 0,
   },
   surface: "edge",
-  preview: { appId: null, width: 0, height: 0, fallback: false, error: null, shown: false, rel: null },
+  preview: { appId: null, width: 0, height: 0, fallback: false, error: null, shown: false, rel: null, seq: 0 },
   notes: [],
   settings: null,
   systemDark: window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -62,7 +63,7 @@ export const useStore = create<Store>((set, get) => ({
   panelLeaving: false,
 
   setShell: (shell) =>
-    set((s) => ({
+    set((s) => (shell.seq < s.shell.seq ? s : {
       shell,
       surface: surfaceOf(shell.mode, s.surface),
       pinned: shell.mode === "panel" || shell.mode === "expanding" ? s.pinned : false,
