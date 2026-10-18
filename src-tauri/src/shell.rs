@@ -922,6 +922,9 @@ impl Shell {
         self.sync_mode(Mode::Opening);
         self.set_noactivate(0, true);
         self.emit_state();
+        // Windows can drop a parked card out of the topmost band (it keeps the
+        // flag but sits under maximized windows), so lift it each time it comes out.
+        show(self.gear.hwnd);
         show(self.main.hwnd);
         let me = self.clone();
         self.main.anim.animate(
@@ -1284,6 +1287,8 @@ impl Shell {
             (Self::preview_rect(&g, anchor, w, h), first)
         };
         if first {
+            // Lifted like the gear in open_dock.
+            show(self.preview.hwnd);
             self.preview.anim.jump(Self::preview_start(&g, rect));
             self.preview.anim.animate(rect, PREVIEW_SPRING, None, None);
         } else {
