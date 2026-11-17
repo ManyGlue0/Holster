@@ -11,18 +11,7 @@ all-features = false
 # are reported for this workspace's direct dependencies.
 unmaintained = "workspace"
 yanked = "deny"
-ignore = [
-    # zip 4.x in tauri-plugin-updater: the extraction CVEs need an attacker-
-    # controlled archive, and the updater only extracts bytes whose minisign
-    # signature matched Holster's key (Holster ships the installer unzipped
-    # anyway). Drop this once the plugin moves to zip >= 9.0.5.
-    { id = "RUSTSEC-2026-0367", reason = "updater extracts only signature-verified bytes" },
-    { id = "RUSTSEC-2026-0368", reason = "updater extracts only signature-verified bytes" },
-    { id = "RUSTSEC-2026-0369", reason = "updater extracts only signature-verified bytes" },
-    { id = "RUSTSEC-2026-0429", reason = "updater extracts only signature-verified bytes" },
-    { id = "RUSTSEC-2026-0545", reason = "updater extracts only signature-verified bytes" },
-    { id = "RUSTSEC-2026-0548", reason = "updater extracts only signature-verified bytes" },
-]
+ignore = []
 
 [licenses]
 # Permissive licenses (and MPL-2.0, file-level copyleft on unmodified crates).
