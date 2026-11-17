@@ -365,7 +365,7 @@ pub async fn note_action(core: C<'_>, key: u64, button: String, open: bool) -> R
         Err(e) => {
             let name = core.reg.manifest(&id).map(|m| m.name).unwrap_or(id.clone());
             let content = Content::Text { title: format!("{name} didn't open"), body: Some(e), buttons: Vec::new() };
-            core.notifier().post(&id, Request { id: None, content, timeout: Some(Duration::from_secs(6)) });
+            let _ = core.notifier().post(&id, Request { id: None, content, timeout: Some(Duration::from_secs(6)) });
         }
     }
     core.health.poke();

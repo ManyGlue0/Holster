@@ -325,9 +325,9 @@ pub fn run() {
                 })
                 .await;
                 match result {
-                    Ok(port) => {
+                    Ok((port, key)) => {
                         *api_core.port.write().unwrap() = port;
-                        api_core.reg.set_api_port(port);
+                        api_core.reg.set_api(port, key);
                     }
                     Err(e) => eprintln!("Holster API failed to start: {e}"),
                 }

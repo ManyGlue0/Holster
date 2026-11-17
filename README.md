@@ -153,7 +153,7 @@ Holster listens on a random loopback port and writes it to `%APPDATA%\Holster\ho
 | `DELETE /apps/{id}/notify/{nid}` | takes a notification back |
 | `GET /apps/{id}/preview/{file}` | serves an app's on-disk preview folder, so previews work while the app is closed |
 
-Requests must name the loopback host (a DNS-rebinding guard), and browser requests must come from loopback origins. Sending a signal from PowerShell:
+Requests must name the loopback host (a DNS-rebinding guard), browser requests must come from loopback origins, and requests a website starts (`Sec-Fetch-Site: cross-site`) are refused. Native apps and scripts aren't affected. Sending a signal from PowerShell:
 
 ```powershell
 $holster = Get-Content "$env:APPDATA\Holster\holster.json" | ConvertFrom-Json

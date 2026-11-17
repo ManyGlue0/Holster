@@ -185,7 +185,7 @@ The tab glows in your app's color for about 2 s (or, while the dock is open, you
 
 Other endpoints: `GET {api}/status` returns `{ "running": true, "version": "..." }`. `POST {api}/apps/<id>/reload` re-reads manifests (see 1.3). `POST {api}/apps/<id>/notify` shows a notification (1.8).
 
-Holster's API rejects requests whose `Host` isn't `127.0.0.1:<port>` or `localhost:<port>`, and browser requests from non-loopback origins.
+Holster's API rejects requests whose `Host` isn't `127.0.0.1:<port>` or `localhost:<port>`, browser requests from non-loopback origins, and anything a website starts (`Sec-Fetch-Site: cross-site`). Call it from your app's native side; a page served from `http://127.0.0.1:<your port>` counts as same-site and works, one served from `localhost` doesn't.
 
 ### 1.8 Notifications
 
@@ -207,7 +207,7 @@ Content-Type: application/json
 }
 ```
 
-Holster answers `{ "ok": true, "id": "meeting-42", "muted": false }`, or `400` with the exact `error`.
+Holster answers `{ "ok": true, "id": "meeting-42", "muted": false }`, or `400` with the exact `error`. An app can have at most 50 notifications showing or waiting; past that a new one gets `429` (updating one by its `id` still works).
 
 | Field | Rules |
 |---|---|

@@ -35,6 +35,8 @@ const PAGE_MIN: (f64, f64) = (200.0, 48.0);
 const PAGE_MAX: (f64, f64) = (480.0, 480.0);
 const PAGE_DEFAULT: (f64, f64) = (CARD_W, 120.0);
 const MAX_BUTTONS: usize = 2;
+/// Notifications one app may have showing or waiting; more are refused (429).
+pub const MAX_PER_APP: usize = 50;
 /// Between cards, and between a card and the tab (CSS px).
 const GAP: f64 = 8.0;
 const MARGIN: f64 = 8.0;
@@ -340,8 +342,9 @@ impl Notifier {
         me
     }
 
-    /// Shows (or updates, same `id`) a notification from `app`.
-    pub fn post(self: &Arc<Self>, app: &str, req: Request) -> Posted {
+    /// Shows (or updates, same `id`) a notification from `app`. Refuses a new
+    /// one while the app already has `MAX_PER_APP` showing or waiting.
+    pub fn post(self: &Arc<Self>, app: &str, req: Request) -> Result<Posted, String> {
         let prefs = self.prefs.get();
         let id = {
             let mut st = self.st.lock().unwrap();
@@ -349,7 +352,7 @@ impl Notifier {
             let seq = st.seq;
             let nid = req.id.clone().unwrap_or_else(|| format!("n{seq}"));
             if prefs.muted.iter().any(|m| m == app) {
-                return Posted { id: nid, muted: true };
+                return Ok(Posted { id: nid, muted: true });
             }
             let size = match &req.content {
                 Content::Page { width, height, .. } => Some((*width, *height)),
@@ -363,6 +366,10 @@ impl Notifier {
                 if size.is_some() {
                     n.size = size;
                 }
+            } else if st.notes.iter().filter(|n| n.app == app).count() >= MAX_PER_APP {
+                return Err(format!(
+                    "{MAX_PER_APP} notifications from this app are already showing or waiting; update one (same id) or withdraw some first"
+                ));
             } else {
                 st.notes.push(Note {
                     key: seq,
@@ -393,7 +400,7 @@ impl Notifier {
             }
         }
         self.refresh();
-        Posted { id, muted: false }
+        Ok(Posted { id, muted: false })
     }
 
     /// The app takes a notification back. No event is sent for it.

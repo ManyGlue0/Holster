@@ -407,6 +407,8 @@ pub struct Registry {
     preview_size: RwLock<HashMap<String, (f64, f64)>>,
     /// Holster's API port, for the URLs of on-disk previews.
     api_port: std::sync::atomic::AtomicU16,
+    /// This session's key for Holster's own (cross-site) preview frames.
+    api_key: RwLock<String>,
     on_change: Box<dyn Fn() + Send + Sync>,
 }
 
@@ -419,6 +421,7 @@ impl Registry {
             status: RwLock::new(HashMap::new()),
             preview_size: RwLock::new(HashMap::new()),
             api_port: std::sync::atomic::AtomicU16::new(0),
+            api_key: RwLock::new(String::new()),
             on_change: Box::new(on_change),
         });
         me.reload();
@@ -483,7 +486,8 @@ impl Registry {
         }
     }
 
-    pub fn set_api_port(&self, port: u16) {
+    pub fn set_api(&self, port: u16, key: String) {
+        *self.api_key.write().unwrap() = key;
         self.api_port.store(port, std::sync::atomic::Ordering::SeqCst);
         (self.on_change)();
     }
@@ -510,6 +514,7 @@ impl Registry {
     /// All apps in dock order (user order first, then new apps by name).
     pub fn views(&self, settings: &Settings) -> Vec<AppView> {
         let status = self.status.read().unwrap().clone();
+        let key = self.api_key.read().unwrap().clone();
         let mut views: Vec<AppView> = self
             .entries
             .read()
@@ -542,7 +547,12 @@ impl Registry {
                         preview_file: m.preview.as_ref().and_then(|p| p.path.as_ref()).and_then(|f| {
                             let port = self.api_port.load(std::sync::atomic::Ordering::SeqCst);
                             let name = f.file_name()?.to_string_lossy().to_string();
-                            (port != 0).then(|| format!("http://127.0.0.1:{port}/apps/{}/preview/{}", e.id, encode_segment(&name)))
+                            (port != 0).then(|| format!(
+                                    "http://127.0.0.1:{port}/apps/{}/preview/{}?{}={key}",
+                                    e.id,
+                                    encode_segment(&name),
+                                    crate::api::KEY_PARAM
+                                ))
                         }),
                         can_launch: m.launch.is_some(),
                         trackable: m.health.is_some() || m.launch.is_some() || m.preview.as_ref().is_some_and(|p| p.url.is_some()),
