@@ -166,9 +166,17 @@ fn image_data_url(path: &Path) -> Result<String, String> {
         "ico" => "image/x-icon",
         _ => return Err(format!("icon.path must be a .png, .svg, .jpg, .webp or .ico file (got \"{}\")", path.display())),
     };
+    const MAX: u64 = 1024 * 1024;
+    let too_big = || "icon.path is larger than 1 MB".to_string();
+    // Check the size first: manifests are re-read on every change, and a
+    // path pointing at a huge file would otherwise be read whole each time.
+    let meta = std::fs::metadata(path).map_err(|e| format!("icon.path can't be read ({}): {e}", path.display()))?;
+    if meta.len() > MAX {
+        return Err(too_big());
+    }
     let bytes = std::fs::read(path).map_err(|e| format!("icon.path can't be read ({}): {e}", path.display()))?;
-    if bytes.len() > 1024 * 1024 {
-        return Err("icon.path is larger than 1 MB".into());
+    if bytes.len() as u64 > MAX {
+        return Err(too_big());
     }
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }

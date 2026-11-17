@@ -52,8 +52,10 @@ fn loopback_host(value: &str, port: u16) -> bool {
     [format!("127.0.0.1:{p}"), format!("localhost:{p}")].iter().any(|h| h.eq_ignore_ascii_case(value))
 }
 
+/// `Origin: null` (sandboxed frames, file:// pages, some redirects) is not
+/// loopback: any website can send it from a sandboxed iframe.
 fn loopback_origin(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("http://") else { return value == "null" };
+    let Some(rest) = value.strip_prefix("http://") else { return false };
     let host = rest.split(':').next().unwrap_or("");
     let port_ok = rest.split_once(':').map(|(_, p)| p.bytes().all(|b| b.is_ascii_digit()) && !p.is_empty()).unwrap_or(true);
     (host == "127.0.0.1" || host == "localhost") && port_ok
@@ -175,14 +177,26 @@ fn decode(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// A request path as a relative path made only of plain names: no `..`,
+/// no drive, root or UNC prefix (joining one would replace the preview
+/// folder, and touching `\\host\share` sends the user's credentials there),
+/// no `:` (alternate data streams).
+fn relative_path(rel: &str) -> Option<PathBuf> {
+    if rel.is_empty() || rel.contains(':') {
+        return None;
+    }
+    let path = PathBuf::from(rel.replace('/', "\\"));
+    path.components().all(|c| matches!(c, std::path::Component::Normal(_))).then_some(path)
+}
+
 /// Files from an app's preview folder, never outside it.
 async fn preview_file(State(c): State<Ctx>, UrlPath((id, file)): UrlPath<(String, String)>) -> Response {
     let Some(dir) = c.reg.preview_dir(&id) else { return unknown(&id) };
     let Some(rel) = decode(&file) else { return (StatusCode::BAD_REQUEST, "Bad path").into_response() };
-    if rel.split(['/', '\\']).any(|seg| seg == ".." || seg.contains(':')) {
+    let Some(rel) = relative_path(&rel) else {
         return (StatusCode::FORBIDDEN, "Outside the preview folder").into_response();
-    }
-    let path = dir.join(rel.replace('/', "\\"));
+    };
+    let path = dir.join(rel);
     let inside = match (std::fs::canonicalize(&dir), std::fs::canonicalize(&path)) {
         (Ok(d), Ok(p)) => p.starts_with(d),
         _ => false,
@@ -265,5 +279,28 @@ mod tests {
         assert!(loopback_origin("http://localhost"));
         assert!(!loopback_origin("https://evil.com"));
         assert!(!loopback_origin("http://127.0.0.1.evil.com"));
+        assert!(!loopback_origin("null"));
+    }
+
+    #[test]
+    fn preview_paths_stay_relative() {
+        assert_eq!(relative_path("index.html"), Some(PathBuf::from("index.html")));
+        assert_eq!(relative_path("assets/app.js"), Some(PathBuf::from(r"assets\app.js")));
+        for bad in [
+            "",
+            "../secret.txt",
+            r"a\..\..\b",
+            r"\\attacker\share\x",
+            "//attacker/share/x",
+            r"\Windows\win.ini",
+            "/etc",
+            r"C:\Windows\win.ini",
+            "C:win.ini",
+            "index.html:stream",
+            r"\\?\C:\x",
+            "./index.html",
+        ] {
+            assert_eq!(relative_path(bad), None, "{bad}");
+        }
     }
 }

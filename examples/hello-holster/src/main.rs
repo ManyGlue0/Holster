@@ -63,7 +63,30 @@ fn respond(mut s: TcpStream, status: &str, kind: &str, body: &[u8]) {
     let _ = s.write_all(body);
 }
 
+fn header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
+    req.lines().skip(1).find_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        k.trim().eq_ignore_ascii_case(name).then(|| v.trim())
+    })
+}
+
+/// Only Holster (or this machine) may call: the Host must name loopback on
+/// our port (DNS-rebinding guard), and a browser request must come from a
+/// loopback page, so a website can't post fake notification events.
+fn from_loopback(req: &str, port: u16) -> bool {
+    let host_ok = header(req, "host").is_some_and(|h| {
+        h.eq_ignore_ascii_case(&format!("127.0.0.1:{port}")) || h.eq_ignore_ascii_case(&format!("localhost:{port}"))
+    });
+    let origin_ok = header(req, "origin").is_none_or(|o| {
+        let Some(rest) = o.strip_prefix("http://") else { return false };
+        let (host, port) = rest.split_once(':').unwrap_or((rest, "80"));
+        (host == "127.0.0.1" || host == "localhost") && !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())
+    });
+    host_ok && origin_ok
+}
+
 fn serve(listener: TcpListener) {
+    let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
     for stream in listener.incoming().flatten() {
         std::thread::spawn(move || {
             let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -95,6 +118,10 @@ fn serve(listener: TcpListener) {
             let mut parts = req.lines().next().unwrap_or("").split_whitespace();
             let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             let path = target.split('?').next().unwrap_or("");
+            if !from_loopback(&req, port) {
+                respond(stream, "403 Forbidden", "text/plain", b"loopback only");
+                return;
+            }
             match (method, path) {
                 ("GET", "/holster/health") => respond(stream, "200 OK", "text/plain", b"ok"),
                 ("POST", "/holster/notify") => {
@@ -492,5 +519,23 @@ fn main() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::from_loopback;
+
+    #[test]
+    fn only_loopback_callers() {
+        let req = |extra: &str| format!("POST /holster/notify HTTP/1.1\r\n{extra}\r\n\r\n");
+        assert!(from_loopback(&req("Host: 127.0.0.1:47390"), 47390));
+        assert!(from_loopback(&req("host: LOCALHOST:47390\r\nOrigin: http://127.0.0.1:5000"), 47390));
+        assert!(!from_loopback(&req(""), 47390));
+        assert!(!from_loopback(&req("Host: evil.com:47390"), 47390));
+        assert!(!from_loopback(&req("Host: 127.0.0.1:47391"), 47390));
+        assert!(!from_loopback(&req("Host: 127.0.0.1:47390\r\nOrigin: https://evil.com"), 47390));
+        assert!(!from_loopback(&req("Host: 127.0.0.1:47390\r\nOrigin: null"), 47390));
+        assert!(!from_loopback(&req("Host: 127.0.0.1:47390\r\nOrigin: http://127.0.0.1.evil.com"), 47390));
     }
 }

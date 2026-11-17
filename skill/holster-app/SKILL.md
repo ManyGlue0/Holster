@@ -246,13 +246,25 @@ When to notify: something the user wants to know now and can act on (a meeting s
 
 - Everything Holster talks to is `127.0.0.1`. Serve Holster routes on a listener bound to `127.0.0.1` only.
 - **Holster routes must never be reachable through a public tunnel.** If your app also exposes itself (Tailscale Funnel, Cloudflare, ngrok), give the tunnel its own listener (or a gate that 404s everything else) and never route `/holster/*` there. A good pattern: the local listener serves everything; requests forwarded from the internet carry a marker header or arrive on a dedicated port, and get only the public routes.
-- Validate the `Host` header on loopback listeners (DNS-rebinding guard).
+- Validate the `Host` header on loopback listeners (DNS-rebinding guard), and reject browser requests whose `Origin` isn't a loopback page: any website can reach `127.0.0.1` directly. `examples/hello-holster` does both.
 
 ### 1.10 Minimal server (Rust, axum)
 
 ```rust
-use axum::{routing::{get, post}, Json, Router};
+use axum::{extract::{Request, State}, http::{header, StatusCode}, middleware::{self, Next},
+           response::{IntoResponse, Response}, routing::{get, post}, Json, Router};
 use serde_json::{json, Value};
+
+/// Loopback callers only: the Host names 127.0.0.1/localhost on our port
+/// (DNS-rebinding guard) and browsers must come from a loopback page.
+async fn loopback_only(State(port): State<u16>, req: Request, next: Next) -> Response {
+    let ok = {
+        let get = |name: header::HeaderName| req.headers().get(name).and_then(|v| v.to_str().ok());
+        get(header::HOST).is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"))
+            && get(header::ORIGIN).is_none_or(|o| o.starts_with("http://127.0.0.1:") || o.starts_with("http://localhost:"))
+    };
+    if ok { next.run(req).await } else { StatusCode::FORBIDDEN.into_response() }
+}
 
 pub async fn serve_holster(app_handle: tauri::AppHandle) -> anyhow::Result<u16> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?; // loopback only
@@ -274,7 +286,8 @@ pub async fn serve_holster(app_handle: tauri::AppHandle) -> anyhow::Result<u16> 
         .route("/holster/notify", post(|Json(e): Json<Value>| async move {
             let _ = (&e["id"], &e["event"], &e["button"]); // e.g. snooze on "action"/"snooze"
             "ok"
-        }));
+        }))
+        .layer(middleware::from_fn_with_state(port, loopback_only));
     tokio::spawn(async move { axum::serve(listener, router).await });
     write_manifest(port)?;
     Ok(port)
