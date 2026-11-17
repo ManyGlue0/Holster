@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
-import { api, on, type AppView, type NoteSlot, type PreviewState, type Settings, type ShellState } from "./lib/api";
+import { api, subscribe, type AppView, type NoteSlot, type PreviewState, type Settings, type ShellState } from "./lib/api";
 import { loadIcons } from "./lib/icons";
 import { useDark, useStore } from "./lib/store";
 import { MainWindow } from "./components/MainWindow";
@@ -18,6 +18,32 @@ function retry(fn: () => Promise<unknown>, attempt = 0) {
 }
 document.documentElement.dataset.window = label;
 
+/** Keeps one piece of backend state in the store: listen first, then read.
+ *  Reading first loses any change made between the read and the listener
+ *  being registered (at startup: the API port, so on-disk previews had no URL
+ *  until some other change came along). A read an event overtook is dropped,
+ *  so an older snapshot never replaces newer state. */
+function sync<T>(event: string, read: () => Promise<T>, apply: (value: T) => void): () => void {
+  let events = 0;
+  const sub = subscribe<T>(event, (value) => {
+    events++;
+    apply(value);
+  });
+  sub.ready
+    .catch(() => api.diag(`couldn't listen for "${event}"`))
+    .then(() =>
+      // The window can load before the backend has finished setting up:
+      // retry the first read until it answers.
+      retry(() => {
+        const seen = events;
+        return read().then((value) => {
+          if (events === seen) apply(value);
+        });
+      }),
+    );
+  return sub.off;
+}
+
 /** Previews from different threads can cross on the way: keep the newest. */
 function setPreview(preview: PreviewState) {
   if (preview.seq >= useStore.getState().preview.seq) useStore.setState({ preview });
@@ -28,14 +54,13 @@ export default function App() {
   const dark = useDark();
 
   useEffect(() => {
-    const s = useStore.getState();
-    // The main window can load before the backend has finished setting up:
-    // retry the first reads until it answers.
-    retry(() => api.shellState().then(s.setShell));
-    retry(() => api.previewState().then(setPreview));
-    retry(() => api.noteSlots().then((notes) => useStore.setState({ notes })));
-    retry(s.loadSettings);
-    retry(s.refreshApps);
+    const offs = [
+      sync<ShellState>("shell", api.shellState, (st) => useStore.getState().setShell(st)),
+      sync<PreviewState>("preview", api.previewState, setPreview),
+      sync<AppView[]>("apps", api.listApps, (apps) => useStore.setState({ apps, appsLoaded: true })),
+      sync<Settings>("settings", api.getSettings, (settings) => useStore.setState({ settings })),
+      sync<(NoteSlot | null)[]>("notes", api.noteSlots, (notes) => useStore.setState({ notes })),
+    ];
     // Warm the icon set after first paint; the tab doesn't need it.
     setTimeout(loadIcons, 200);
 
@@ -49,13 +74,6 @@ export default function App() {
     const onMedia = () => useStore.setState({ systemDark: media.matches });
     media.addEventListener("change", onMedia);
 
-    const offs = [
-      on<ShellState>("shell", (st) => useStore.getState().setShell(st)),
-      on<PreviewState>("preview", setPreview),
-      on<AppView[]>("apps", (apps) => useStore.setState({ apps, appsLoaded: true })),
-      on<Settings>("settings", (settings) => useStore.setState({ settings })),
-      on<(NoteSlot | null)[]>("notes", (notes) => useStore.setState({ notes })),
-    ];
     return () => {
       offs.forEach((off) => off());
       media.removeEventListener("change", onMedia);

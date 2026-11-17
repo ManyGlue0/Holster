@@ -157,14 +157,23 @@ export const api = {
 };
 
 export function on<T>(event: string, handler: (payload: T) => void): () => void {
+  return subscribe(event, handler).off;
+}
+
+/** Like `on`, plus `ready`, which settles once the listener is registered:
+ *  an event emitted before that never reaches the handler. */
+export function subscribe<T>(event: string, handler: (payload: T) => void): { off: () => void; ready: Promise<void> } {
   let un: UnlistenFn | null = null;
   let disposed = false;
-  listen<T>(event, (e) => handler(e.payload)).then((u) => {
+  const ready = listen<T>(event, (e) => handler(e.payload)).then((u) => {
     if (disposed) u();
     else un = u;
   });
-  return () => {
-    disposed = true;
-    un?.();
+  return {
+    off: () => {
+      disposed = true;
+      un?.();
+    },
+    ready,
   };
 }
