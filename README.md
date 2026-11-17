@@ -209,6 +209,11 @@ examples/hello-holster/      the example app and test fixture
 docs/images/                 README screenshots
 ```
 
+## Credits
+
+- Icons: [Lucide](https://lucide.dev) (ISC; some icons derive from [Feather](https://feathericons.com), MIT). Holster ships Lucide's icon data, and its license is reproduced in [LICENSE](LICENSE).
+- Built with [Tauri](https://tauri.app), [React](https://react.dev), [Framer Motion](https://motion.dev) and [dnd-kit](https://dndkit.com).
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), with the Lucide notice for the bundled icon data.
