@@ -1,0 +1,53 @@
+# cargo deny check: advisories, licenses, bans and sources for Holster.
+# Holster only ships for Windows, so Linux/macOS-only crates (GTK, zbus...)
+# that sit in Cargo.lock but are never built are left out of the graph.
+
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = false
+
+[advisories]
+# Fails on vulnerabilities, unsound and yanked crates; unmaintained crates
+# are reported for this workspace's direct dependencies.
+unmaintained = "workspace"
+yanked = "deny"
+ignore = [
+    # zip 4.x in tauri-plugin-updater: the extraction CVEs need an attacker-
+    # controlled archive, and the updater only extracts bytes whose minisign
+    # signature matched Holster's key (Holster ships the installer unzipped
+    # anyway). Drop this once the plugin moves to zip >= 9.0.5.
+    { id = "RUSTSEC-2026-0367", reason = "updater extracts only signature-verified bytes" },
+    { id = "RUSTSEC-2026-0368", reason = "updater extracts only signature-verified bytes" },
+    { id = "RUSTSEC-2026-0369", reason = "updater extracts only signature-verified bytes" },
+    { id = "RUSTSEC-2026-0429", reason = "updater extracts only signature-verified bytes" },
+    { id = "RUSTSEC-2026-0545", reason = "updater extracts only signature-verified bytes" },
+    { id = "RUSTSEC-2026-0548", reason = "updater extracts only signature-verified bytes" },
+]
+
+[licenses]
+# Permissive licenses (and MPL-2.0, file-level copyleft on unmodified crates).
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unlicense",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
