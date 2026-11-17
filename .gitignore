@@ -8,5 +8,21 @@ src-tauri/gen
 *.key
 *.key.pub
 
+# Other secrets and credentials
+.env
+.env.*
+*.pem
+*.pfx
+*.p12
+
+# Local data a test run can leave behind (Holster's own lives in %APPDATA%)
+*.db
+*.sqlite
+*.sqlite3
+holster.json
+
+# Release builds kept locally: they go on GitHub Releases, not in git
+/installers/
+
 # Local notes, not for the repo
 docs/RELEASING.md
