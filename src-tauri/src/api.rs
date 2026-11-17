@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn cross_site_needs_the_preview_key() {
-        let key = "0123456789abcdef0123456789abcdef";
+        let key = "0123456789abcdef0123456789abcdef"; // gitleaks:allow (test value, not a secret)
         let q = format!("theme=dark&{KEY_PARAM}={key}&running=1");
         assert!(keyed_preview(&Method::GET, "/apps/notes/preview/index.html", Some(&q), key));
         assert!(keyed_preview(&Method::HEAD, "/apps/notes/preview/a/b.css", Some(&q), key));

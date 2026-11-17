@@ -1,0 +1,3 @@
+# Findings reviewed and confirmed not to be secrets.
+# Unit-test placeholder key in api.rs (commit 3c08b05), not a credential.
+3c08b053ae485f9032d620876b03d7cf7a8c69bb:src-tauri/src/api.rs:generic-api-key:374
